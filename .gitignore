@@ -1,0 +1,6 @@
+src/Debug
+src/botlib/Debug
+src/splines/Debug
+src/renderer/Debug
+src/curl-7.12.2/lib
+src/.vs
