@@ -329,7 +329,10 @@
     <ClCompile Include="..\ft2\ttsbit.c">
       <Filter>FreeType2\Source Files No. 2</Filter>
     </ClCompile>
-    <ClCompile Include="d_vulkan.cpp">
+    <ClCompile Include="d_vulkan.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="d_vulkan_utils.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -566,6 +569,9 @@
       <Filter>FreeType2\Header Files No. 2</Filter>
     </ClInclude>
     <ClInclude Include="d_vulkan.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="d_vulkan_utils.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

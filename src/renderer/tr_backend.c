@@ -27,6 +27,7 @@ If you have questions concerning this license or the applicable additional terms
 */
 
 #include "tr_local.h"
+#include "d_vulkan.h"
 
 backEndData_t   *backEndData[SMP_FRAMES];
 backEndState_t backEnd;
@@ -1459,6 +1460,8 @@ void RB_ExecuteRenderCommands( const void *data ) {
 		backEnd.smpFrame = 1;
 	}
 
+	d_VK_BeginFrame();
+
 	while ( 1 ) {
 		switch ( *(const int *)data ) {
 		case RC_SET_COLOR:
@@ -1498,6 +1501,8 @@ void RB_ExecuteRenderCommands( const void *data ) {
 			// stop rendering on this thread
 			t2 = ri.Milliseconds();
 			backEnd.pc.msec = t2 - t1;
+
+			d_VK_EndFrame();
 			return;
 		}
 	}

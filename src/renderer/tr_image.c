@@ -34,6 +34,8 @@ If you have questions concerning this license or the applicable additional terms
 */
 
 #include "tr_local.h"
+#include "d_vulkan.h"
+#include <vulkan/vulkan.h>
 
 /*
  * Include file for users of JPEG library.
@@ -956,6 +958,17 @@ image_t *R_CreateImage( const char *name, const byte *pic, int width, int height
 	}
 
 	GL_Bind( image );
+
+	d_VK_CreateVkImage((unsigned*)pic,
+						image->width, image->height,
+						image->mipmap,
+						allowPicmip,
+						isLightmap,
+						//&image->internalFormat,
+						//&image->uploadWidth,
+						//&image->uploadHeight,
+						noCompress,
+						image->vkImage);
 
 	Upload32( (unsigned *)pic,
 			  image->width, image->height,

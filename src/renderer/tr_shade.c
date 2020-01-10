@@ -1728,6 +1728,7 @@ void RB_EndSurface( void ) {
 		DrawNormals( input );
 	}
 
+	d_VK_DrawTris(input);
 
 	// clear shader so we can tell we don't have any unclosed surfaces
 	tess.numIndexes = 0;

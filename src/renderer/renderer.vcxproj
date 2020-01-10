@@ -184,7 +184,8 @@
     <ClCompile Include="..\win32\win_gamma.c" />
     <ClCompile Include="..\win32\win_glimp.c" />
     <ClCompile Include="..\win32\win_qgl.c" />
-    <ClCompile Include="d_vulkan.cpp" />
+    <ClCompile Include="d_vulkan.c" />
+    <ClCompile Include="d_vulkan_utils.c" />
     <ClCompile Include="tr_animation_mdm.c" />
     <ClCompile Include="tr_animation_mds.c" />
     <ClCompile Include="tr_backend.c" />
@@ -288,6 +289,7 @@
     <ClInclude Include="..\win32\win_local.h" />
     <ClInclude Include="anorms256.h" />
     <ClInclude Include="d_vulkan.h" />
+    <ClInclude Include="d_vulkan_utils.h" />
     <ClInclude Include="qgl.h" />
     <ClInclude Include="tr_local.h" />
     <ClInclude Include="tr_public.h" />

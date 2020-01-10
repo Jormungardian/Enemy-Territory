@@ -36,6 +36,7 @@ If you have questions concerning this license or the applicable additional terms
 #include "../qcommon/qcommon.h"
 #include "tr_public.h"
 #include "qgl.h"
+#include <vulkan/vulkan.h>
 
 #define GL_INDEX_TYPE       GL_UNSIGNED_INT
 typedef unsigned int glIndex_t;
@@ -87,6 +88,7 @@ typedef struct image_s {
 	int width, height;                      // source image
 	int uploadWidth, uploadHeight;          // after power of two and picmip but not including clamp to MAX_TEXTURE_SIZE
 	GLuint texnum;                      // gl texture binding
+	VkImage* vkImage;					// VkImage created
 
 	int frameUsed;                  // for texture usage in frame statistics
 

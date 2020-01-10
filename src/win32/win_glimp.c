@@ -643,6 +643,8 @@ static qboolean GLW_CreateWindow( const char *drivername, int width, int height,
 			}
 		}
 
+		d_VK_InitWindow(width, height, "Vulkan ET");
+
 		g_wv.hWnd = CreateWindowEx(
 			exstyle,
 			WINDOW_CLASS_NAME,
@@ -666,6 +668,8 @@ static qboolean GLW_CreateWindow( const char *drivername, int width, int height,
 	{
 		ri.Printf( PRINT_ALL, "...window already present, CreateWindowEx skipped\n" );
 	}
+
+	d_VK_InitVulkan();
 
 	if ( !GLW_InitDriver( drivername, colorbits ) ) {
 		ShowWindow( g_wv.hWnd, SW_HIDE );
@@ -1291,7 +1295,6 @@ void GLimp_EndFrame( void ) {
 	// check logging
 	QGL_EnableLogging( r_logFile->integer );
 }
-
 
 extern qboolean GlideIsValid( void );
 static void GLW_StartOpenGL( void ) {
