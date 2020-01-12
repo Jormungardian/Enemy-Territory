@@ -968,7 +968,10 @@ image_t *R_CreateImage( const char *name, const byte *pic, int width, int height
 						//&image->uploadWidth,
 						//&image->uploadHeight,
 						noCompress,
-						image->vkImage);
+						&image->vkImage,
+						&image->vkDeviceMemory,
+						&image->vkImageView,
+						&image->vkDescriptorSet);
 
 	Upload32( (unsigned *)pic,
 			  image->width, image->height,

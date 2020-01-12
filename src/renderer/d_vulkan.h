@@ -25,7 +25,7 @@ void d_VK_InitVulkan();
 void d_VK_BeginFrame();
 void d_VK_EndFrame();
 
-void d_VK_CreateVkImage(unsigned* data,
+void d_VK_CreateVkImage(unsigned* pixels,
 						int32_t width, int32_t height,
 						VkBool32 mipmap,
 						VkBool32 picmip,
@@ -34,6 +34,9 @@ void d_VK_CreateVkImage(unsigned* data,
 						//int32_t* pUploadWidth, 
 						//int32_t* pUploadHeight,
 						VkBool32 noCompress,
-						VkImage* result);
+						VkImage* vkImage,
+						VkDeviceMemory* vkDeviceMemory,
+						VkImageView* vkImageView,
+						VkDescriptorSet* vkDescriptorSet);
 
 void d_VK_DrawTris(shaderCommands_t* input);

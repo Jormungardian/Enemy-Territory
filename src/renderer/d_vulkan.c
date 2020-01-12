@@ -37,6 +37,9 @@ QueueFamilyIndices g_QueueFamilyIndices;
 
 VkPipelineLayout g_DebugWireframePL;
 VkPipeline g_DebugWireframePSO;
+VkDescriptorSetLayout g_DebugDescriptorSetLayout;
+VkDescriptorPool g_DebugDescriptorPool;
+VkSampler g_DebugSampler;
 
 ///////////////////////////
 
@@ -479,6 +482,61 @@ VkShaderModule CreateShaderModule(char* shaderCode, size_t codeSize)
 	return shaderModule;
 }
 
+void CreateDebugDescriptorSetLayout()
+{
+	INIT_STRUCT(VkDescriptorSetLayoutBinding, samplerLayoutBinding);
+	samplerLayoutBinding.binding = 0;
+	samplerLayoutBinding.descriptorCount = 1;
+	samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	samplerLayoutBinding.pImmutableSamplers = &g_DebugSampler;
+	samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	INIT_STRUCT(VkDescriptorSetLayoutCreateInfo, layoutInfo);
+	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	layoutInfo.bindingCount = 1;
+	layoutInfo.pBindings = &samplerLayoutBinding;
+
+	vkCreateDescriptorSetLayout(g_VkDevice, &layoutInfo, NULL, &g_DebugDescriptorSetLayout);
+}
+
+void CreateDebugDescriptorPool()
+{
+	INIT_STRUCT(VkDescriptorPoolSize, poolSize);
+	poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	poolSize.descriptorCount = g_VkSwapchainImageCount;
+
+	INIT_STRUCT(VkDescriptorPoolCreateInfo, poolInfo);
+	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	poolInfo.poolSizeCount = 1;
+	poolInfo.pPoolSizes = &poolSize;
+	poolInfo.maxSets = 1000;
+
+	vkCreateDescriptorPool(g_VkDevice, &poolInfo, NULL, &g_DebugDescriptorPool);
+}
+
+void CreateSamplers()
+{
+	INIT_STRUCT(VkSamplerCreateInfo, samplerInfo);
+	samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+	samplerInfo.magFilter = VK_FILTER_LINEAR;
+	samplerInfo.minFilter = VK_FILTER_LINEAR;
+	samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	samplerInfo.anisotropyEnable = VK_TRUE;
+	samplerInfo.maxAnisotropy = 16;
+	samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+	samplerInfo.unnormalizedCoordinates = VK_FALSE;
+	samplerInfo.compareEnable = VK_FALSE;
+	samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+	samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+	samplerInfo.mipLodBias = 0.0f;
+	samplerInfo.minLod = 0.0f;
+	samplerInfo.maxLod = 0.0f;
+
+	vkCreateSampler(g_VkDevice, &samplerInfo, NULL, &g_DebugSampler);
+}
+
 void CreateDebugPipelines()
 {
 	size_t vertShaderCodeSize = 0;
@@ -506,23 +564,36 @@ void CreateDebugPipelines()
 
 	VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
-	INIT_STRUCT(VkVertexInputBindingDescription, bindingDescription);
-	bindingDescription.binding = 0;
-	bindingDescription.stride = sizeof(vec4hack_t);
-	bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+	VkVertexInputBindingDescription bindingDescriptions[2];
+	memset(&bindingDescriptions[0], 0, 2 * sizeof(VkVertexInputBindingDescription));
+	// Vertices
+	bindingDescriptions[0].binding = 0;
+	bindingDescriptions[0].stride = sizeof(vec4hack_t);
+	bindingDescriptions[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+	// UVs
+	bindingDescriptions[1].binding = 1;
+	bindingDescriptions[1].stride = sizeof(vec2hack_t);
+	bindingDescriptions[1].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
-	INIT_STRUCT(VkVertexInputAttributeDescription, attributeDescription);
-	attributeDescription.binding = 0;
-	attributeDescription.location = 0;
-	attributeDescription.format = VK_FORMAT_R32G32B32A32_SFLOAT;
-	attributeDescription.offset = 0;
+	VkVertexInputAttributeDescription attributeDescriptions[2];
+	memset(&attributeDescriptions[0], 0, 2 * sizeof(VkVertexInputAttributeDescription));
+	// Vertices
+	attributeDescriptions[0].binding = 0;
+	attributeDescriptions[0].location = 0;
+	attributeDescriptions[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+	attributeDescriptions[0].offset = 0;
+	// UVs
+	attributeDescriptions[1].binding = 1;
+	attributeDescriptions[1].location = 1;
+	attributeDescriptions[1].format = VK_FORMAT_R32G32_SFLOAT;
+	attributeDescriptions[1].offset = 0;
 
 	INIT_STRUCT(VkPipelineVertexInputStateCreateInfo, vertexInputInfo);
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	vertexInputInfo.vertexBindingDescriptionCount = 1;
-	vertexInputInfo.vertexAttributeDescriptionCount = 1;
-	vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-	vertexInputInfo.pVertexAttributeDescriptions = &attributeDescription;
+	vertexInputInfo.vertexBindingDescriptionCount = 2;
+	vertexInputInfo.vertexAttributeDescriptionCount = 2;
+	vertexInputInfo.pVertexBindingDescriptions = &bindingDescriptions[0];
+	vertexInputInfo.pVertexAttributeDescriptions = &attributeDescriptions[0];
 
 	INIT_STRUCT(VkPipelineInputAssemblyStateCreateInfo, inputAssembly);
 	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -553,7 +624,7 @@ void CreateDebugPipelines()
 	rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
 	rasterizer.depthClampEnable = VK_FALSE;
 	rasterizer.rasterizerDiscardEnable = VK_FALSE;
-	rasterizer.polygonMode = VK_POLYGON_MODE_LINE;
+	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
 	rasterizer.lineWidth = 1.0f;
 	rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
 	rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
@@ -586,7 +657,8 @@ void CreateDebugPipelines()
 
 	INIT_STRUCT(VkPipelineLayoutCreateInfo, pipelineLayoutInfo);
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	pipelineLayoutInfo.setLayoutCount = 0;
+	pipelineLayoutInfo.setLayoutCount = 1;
+	pipelineLayoutInfo.pSetLayouts = &g_DebugDescriptorSetLayout;
 	pipelineLayoutInfo.pushConstantRangeCount = 1;
 	pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
@@ -683,6 +755,9 @@ void d_VK_InitVulkan()
 	CreateFramebuffers();
 	CreateCommandPool();
 
+	CreateSamplers();
+	CreateDebugDescriptorPool();
+	CreateDebugDescriptorSetLayout();
 	CreateDebugPipelines();
 
 
@@ -818,7 +893,7 @@ uint32_t findMemoryType(uint32_t typeBits, VkMemoryPropertyFlags properties)
 	return 0;
 }
 
-void d_VK_CreateVkImage(unsigned* data,
+void d_VK_CreateVkImage(unsigned* pixels,
 	int32_t width, 
 	int32_t height,
 	VkBool32 mipmap,
@@ -828,77 +903,155 @@ void d_VK_CreateVkImage(unsigned* data,
 	//int32_t* pUploadWidth, 
 	//int32_t* pUploadHeight,
 	VkBool32 noCompress,
-	VkImage* result)
+	VkImage* vkImage,
+	VkDeviceMemory* vkDeviceMemory,
+	VkImageView* vkImageView,
+	VkDescriptorSet* vkDescriptorSet)
 {
-	//VkBuffer stagingBuffer;
-	//VkDeviceMemory stagingMemory;
-	//size_t textureSize = width * height * 4;
-	//
+	VkBuffer stagingBuffer;
+	VkDeviceMemory stagingMemory;
+	VkMemoryRequirements stagingReqs;
+	size_t textureSize = width * height * 4;
+	
+	// Create a host-visible staging buffer that contains the raw image data
+	INIT_STRUCT(VkBufferCreateInfo, bufferCI);
+	bufferCI.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	bufferCI.size = textureSize;
+	bufferCI.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+	bufferCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-	//// Create a host-visible staging buffer that contains the raw image data
-	//INIT_STRUCT(VkBufferCreateInfo, bufferCI);
-	//bufferCI.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	//bufferCI.size = textureSize;
-	//bufferCI.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-	//bufferCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	//bufferCI.queueFamilyIndexCount = 1;
-	//bufferCI.pQueueFamilyIndices = &g_QueueFamilyIndices.graphicsFamily;
-	//VkResult re = vkCreateBuffer(g_VkDevice, &bufferCI, NULL, &stagingBuffer);
+	d_VK_CreateBuffer(&g_VkDevice, &bufferCI, &stagingBuffer, &stagingMemory, &stagingReqs);
 
-	//// Get memory requirements for the staging buffer(alignment, memory type bits)
-	//INIT_STRUCT(VkMemoryRequirements, memReqs);
-	//vkGetBufferMemoryRequirements(g_VkDevice, stagingBuffer, &memReqs);
-	//INIT_STRUCT(VkMemoryAllocateInfo, memAllocInfo);
-	//memAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	//memAllocInfo.allocationSize = memReqs.size;
-	//// Get memory type index for a host visible buffer
-	//memAllocInfo.memoryTypeIndex = findMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-	//re = vkAllocateMemory(g_VkDevice, &memAllocInfo, NULL, &stagingMemory);
-	//re = vkBindBufferMemory(g_VkDevice, stagingBuffer, stagingMemory, 0);
+	void* data;
+	vkMapMemory(g_VkDevice, stagingMemory, 0, textureSize, 0, &data);
+	memcpy(data, pixels, textureSize);
+	vkUnmapMemory(g_VkDevice, stagingMemory);
 
-	//// Copy texture data into host local staging buffer
-	//uint8_t* mappedData;
-	//re = vkMapMemory(g_VkDevice, stagingMemory, 0, memReqs.size, 0, (void**)& mappedData);
-	//memcpy(mappedData, data, textureSize);
-	//vkUnmapMemory(g_VkDevice, stagingMemory);
+	d_Vk_CreateImage(&g_VkDevice, width, height, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vkImage, vkDeviceMemory);
 
+	VkCommandBuffer copyCmd = d_VK_CreateCommandBuffer(&g_VkDevice, &g_VkCommandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, VK_TRUE);
 
+	INIT_STRUCT(VkImageSubresourceRange, subresourceRange);
+	subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	subresourceRange.baseMipLevel = 0;
+	subresourceRange.levelCount = 1;
+	subresourceRange.layerCount = 1;
 
+	INIT_STRUCT(VkImageMemoryBarrier, imageMemoryBarrier);
+	imageMemoryBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	imageMemoryBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	imageMemoryBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	imageMemoryBarrier.image = *vkImage;
+	imageMemoryBarrier.subresourceRange = subresourceRange;
+	imageMemoryBarrier.srcAccessMask = 0;
+	imageMemoryBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 
-	//INIT_STRUCT(VkImageCreateInfo, imageCreateInfo);
-	//imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-	//imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-	//imageCreateInfo.format = GetImageFormat(data, width, height, lightMap);
-	//imageCreateInfo.arrayLayers = 1;
-	//imageCreateInfo.extent.width = width;
-	//imageCreateInfo.extent.height = height;
-	//imageCreateInfo.extent.depth = 0;
-	//imageCreateInfo.mipLevels = 1; // DONOTCOMMIT: TODO Create mip chains if desired
-	//imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-	//imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-	//imageCreateInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
-	//imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	//imageCreateInfo.queueFamilyIndexCount = 1;
-	//imageCreateInfo.pQueueFamilyIndices = &g_QueueFamilyIndices.graphicsFamily;
+	vkCmdPipelineBarrier(
+		copyCmd,
+		VK_PIPELINE_STAGE_HOST_BIT,
+		VK_PIPELINE_STAGE_TRANSFER_BIT,
+		0,
+		0, NULL,
+		0, NULL,
+		1, &imageMemoryBarrier);
 
-	//imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	//
-	//result = (VkImage*)malloc(sizeof(VkImage));
-	//IS_SUCCESS(vkCreateImage(g_VkDevice, &imageCreateInfo, NULL, result));
+	INIT_STRUCT(VkBufferImageCopy, bufferCopyRegion);
+	bufferCopyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	bufferCopyRegion.imageSubresource.mipLevel = 0;
+	bufferCopyRegion.imageSubresource.baseArrayLayer = 0;
+	bufferCopyRegion.imageSubresource.layerCount = 1;
+	bufferCopyRegion.imageExtent.width = width;
+	bufferCopyRegion.imageExtent.height = height;
+	bufferCopyRegion.imageExtent.depth = 1;
+	bufferCopyRegion.bufferOffset = 0;
 
-	//vkGetImageMemoryRequirements(g_VkDevice, result, &memReqs);
-	//memAllocInfo.allocationSize = memReqs.size;
-	//memAllocInfo.memoryTypeIndex = findMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-	//VK_CHECK_RESULT(vkAllocateMemory(g_VkDevice, &memAllocInfo, NULL, &result.deviceMemory));
-	//VK_CHECK_RESULT(vkBindImageMemory(g_VkDevice, result, texture.deviceMemory, 0));
+	// Copy mip levels from staging buffer
+	vkCmdCopyBufferToImage(
+		copyCmd,
+		stagingBuffer,
+		*vkImage,
+		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		1,
+		&bufferCopyRegion);
+
+	// Once the data has been uploaded we transfer to the texture image to the shader read layout, so it can be sampled from
+	imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	imageMemoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+	imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+	imageMemoryBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+	// Insert a memory dependency at the proper pipeline stages that will execute the image layout transition 
+	// Source pipeline stage stage is copy command exection (VK_PIPELINE_STAGE_TRANSFER_BIT)
+	// Destination pipeline stage fragment shader access (VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT)
+	vkCmdPipelineBarrier(
+		copyCmd,
+		VK_PIPELINE_STAGE_TRANSFER_BIT,
+		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+		0,
+		0, NULL,
+		0, NULL,
+		1, &imageMemoryBarrier);
+
+	d_VK_FlushCommandBuffer(g_VkDevice, g_VkCommandPool, copyCmd, g_VkGraphicsQueue, VK_TRUE);
+
+	// Clean up staging resources
+	vkFreeMemory(g_VkDevice, stagingMemory, NULL);
+	vkDestroyBuffer(g_VkDevice, stagingBuffer, NULL);
+
+	// Create ImageView
+	INIT_STRUCT(VkImageViewCreateInfo, viewInfo);
+	viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	viewInfo.image = *vkImage;
+	viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	viewInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+	viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	viewInfo.subresourceRange.baseMipLevel = 0;
+	viewInfo.subresourceRange.levelCount = 1;
+	viewInfo.subresourceRange.baseArrayLayer = 0;
+	viewInfo.subresourceRange.layerCount = 1;
+	vkCreateImageView(g_VkDevice, &viewInfo, NULL, vkImageView);
+
+	// Create Descriptor Set for this image,
+	// DONOTCOMMIT: Is there a better way?
+	{
+		VkDescriptorSet ds;
+		VkDescriptorSetLayout layout[] = { g_DebugDescriptorSetLayout };
+		INIT_STRUCT(VkDescriptorSetAllocateInfo, allocInfo);
+		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.descriptorPool = g_DebugDescriptorPool;
+		allocInfo.descriptorSetCount = 1;
+		allocInfo.pSetLayouts = &layout[0];
+		vkAllocateDescriptorSets(g_VkDevice, &allocInfo, vkDescriptorSet);
+
+		INIT_STRUCT(VkDescriptorImageInfo, imageInfo);
+		imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		imageInfo.imageView = *vkImageView;
+		imageInfo.sampler = &g_DebugSampler;
+
+		INIT_STRUCT(VkWriteDescriptorSet, descWrite);
+		descWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descWrite.dstSet = *vkDescriptorSet;
+		descWrite.dstBinding = 0;
+		descWrite.dstArrayElement = 0;
+		descWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		descWrite.descriptorCount = 1;
+		descWrite.pImageInfo = &imageInfo;
+
+		vkUpdateDescriptorSets(g_VkDevice, 1, &descWrite, 0, NULL);
+	}
 }
 
 void d_VK_DrawTris(shaderCommands_t* input)
 {
 	VkBuffer vertexBuffer;
+	VkBuffer uvsBuffer;
 	VkBuffer indexBuffer;
 
 	{
+		// Vertices
+
 		INIT_STRUCT(VkBufferCreateInfo, bufferInfo);
 		bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 		bufferInfo.size = sizeof(vec4hack_t) * input->numVertexes;
@@ -938,6 +1091,34 @@ void d_VK_DrawTris(shaderCommands_t* input)
 	}
 
 	{
+		// UVs
+
+		INIT_STRUCT(VkBufferCreateInfo, bufferInfo);
+		bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		bufferInfo.size = sizeof(vec2hack_t) * input->numVertexes;
+		bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+		bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+		if (vkCreateBuffer(g_VkDevice, &bufferInfo, NULL, &uvsBuffer) != VK_SUCCESS) {
+			assert(0);
+		}
+
+		vkBindBufferMemory(g_VkDevice, uvsBuffer, g_VertexBuffersPoolDeviceMemory, g_CurrentVertexBufferOffset);
+		void* data;
+		vkMapMemory(g_VkDevice, g_VertexBuffersPoolDeviceMemory, g_CurrentVertexBufferOffset, bufferInfo.size, 0, &data);
+		memcpy(data, input->texCoords0, (size_t)bufferInfo.size);
+		vkUnmapMemory(g_VkDevice, g_VertexBuffersPoolDeviceMemory);
+
+		g_CurrentVertexBufferOffset += sizeof(vec2hack_t) * input->numVertexes;
+
+		while (g_CurrentVertexBufferOffset % g_VertexBuffersMemoryRequirements.alignment != 0) {
+			g_CurrentVertexBufferOffset++;
+		}
+	}
+
+	{
+		// Indexes
+
 		INIT_STRUCT(VkBufferCreateInfo, bufferInfo);
 		bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 		bufferInfo.size = (uint64_t)(sizeof(int) * input->numIndexes);
@@ -975,9 +1156,9 @@ void d_VK_DrawTris(shaderCommands_t* input)
 #endif
 	}
 
-	VkBuffer vertexBuffers[] = { vertexBuffer };
-	VkDeviceSize offsets[] = { 0 };
-	vkCmdBindVertexBuffers(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], 0, 1, vertexBuffers, offsets);
+	VkBuffer vertexBuffers[] = { vertexBuffer, uvsBuffer };
+	VkDeviceSize offsets[] = { 0, 0 };
+	vkCmdBindVertexBuffers(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], 0, 2, &vertexBuffers[0], offsets);
 
 	vkCmdBindIndexBuffer(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
@@ -986,13 +1167,20 @@ void d_VK_DrawTris(shaderCommands_t* input)
 		vkCmdBindPipeline(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, g_DebugWireframePSO);
 		vkCmdPushConstants(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], g_DebugWireframePL, VK_SHADER_STAGE_VERTEX_BIT, 0, 6 * sizeof(float), &ortho[0]);
 
+		{
+			//if (input->shader->numUnfoggedPasses > 0 && input->shader->stages[0]->bundle[0] != NULL && input->shader->stages[0]->bundle[0].image != NULL) 
+			{
+				image_t* img = input->shader->stages[0]->bundle[0].image[0];
+
+				vkCmdBindDescriptorSets(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, g_DebugWireframePL, 0, 1, &img->vkDescriptorSet, 0, NULL);
+			}
+		}
+
 		vkCmdDrawIndexed(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], input->numIndexes, 1, 0, 0, 0);
 	}
 	else {
 		// TODO: Create a PSO for 3D
 	}
 	
-	
-
 	//vkCmdDraw(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], input->numVertexes, 1, 0, 0);
 }
