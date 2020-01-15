@@ -305,6 +305,8 @@ typedef struct {
 #define NUM_TEXTURE_BUNDLES 2
 
 typedef struct {
+	char name[MAX_QPATH];
+
 	qboolean active;
 
 	textureBundle_t bundle[NUM_TEXTURE_BUNDLES];

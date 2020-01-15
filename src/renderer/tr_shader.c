@@ -27,6 +27,7 @@ If you have questions concerning this license or the applicable additional terms
 */
 
 #include "tr_local.h"
+#include "d_vulkan.h"
 
 // tr_shader.c -- this file deals with the parsing and definition of shaders
 
@@ -2211,6 +2212,8 @@ static shader_t *GeneratePermanentShader( void ) {
 	hash = generateHashValue( newShader->name );
 	newShader->next = hashTable[hash];
 	hashTable[hash] = newShader;
+
+	d_VK_ProcessShader(newShader);
 
 	return newShader;
 }

@@ -1,9 +1,32 @@
 #include "d_vulkan_utils.h"
+#include "d_vulkan_core.h"
 #include <vulkan/vulkan.h>
 #include <assert.h>
 
 #define INIT_STRUCT(s, n) s n; memset(&n, 0, sizeof(s));
 #define IS_SUCCESS(f) assert( f != VK_SUCCESS);
+
+
+uint32_t FindMemoryType(uint32_t typeBits, VkMemoryPropertyFlags properties)
+{
+	VkPhysicalDeviceMemoryProperties memoryProperties;
+	vkGetPhysicalDeviceMemoryProperties(g_VkPhysicalDevice, &memoryProperties);
+
+	for (uint32_t i = 0; i < memoryProperties.memoryTypeCount; i++)
+	{
+		if ((typeBits & 1) == 1)
+		{
+			if ((memoryProperties.memoryTypes[i].propertyFlags & properties) == properties)
+			{
+				return i;
+			}
+		}
+		typeBits >>= 1;
+	}
+
+	assert(0);
+	return 0;
+}
 
 void d_VK_CreateBuffer(VkDevice* device, VkBufferCreateInfo* bufferInfo, VkBuffer* buffer, VkDeviceMemory* deviceMemory, VkMemoryRequirements* memRequirements)
 {
@@ -17,7 +40,7 @@ void d_VK_CreateBuffer(VkDevice* device, VkBufferCreateInfo* bufferInfo, VkBuffe
 	INIT_STRUCT(VkMemoryAllocateInfo, allocInfo);
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	allocInfo.allocationSize = memRequirements->size;
-	allocInfo.memoryTypeIndex = findMemoryType(memRequirements->memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	allocInfo.memoryTypeIndex = FindMemoryType(memRequirements->memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
 	if (vkAllocateMemory(*device, &allocInfo, NULL, deviceMemory) != VK_SUCCESS) {
 		assert(0);
@@ -50,7 +73,7 @@ void d_Vk_CreateImage(VkDevice* device, uint32_t width, uint32_t height, VkForma
 	INIT_STRUCT(VkMemoryAllocateInfo, allocInfo);
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	allocInfo.allocationSize = memRequirements.size;
-	allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
+	allocInfo.memoryTypeIndex = FindMemoryType(memRequirements.memoryTypeBits, properties);
 
 	vkAllocateMemory(*device, &allocInfo, NULL, imageMemory);
 

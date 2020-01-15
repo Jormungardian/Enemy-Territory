@@ -3,23 +3,6 @@
 #include "tr_local.h"
 #include "vulkan/vulkan.h"
 
-typedef struct QueueFamilyIndices {
-	int graphicsFamily;
-	int presentFamily;
-	/*
-	BOOL isComplete() {
-		return graphicsFamily >= 0 && presentFamily >= 0;
-	}*/
-} QueueFamilyIndices;
-
-typedef struct SwapChainSupportDetails {
-	VkSurfaceCapabilitiesKHR capabilities;
-	size_t formatCount;
-	VkSurfaceFormatKHR* formats;
-	size_t presentModeCount;
-	VkPresentModeKHR* presentModes;
-} SwapChainSupportDetails;
-
 void d_VK_InitWindow(uint32_t width, uint32_t height, const char* title);
 void d_VK_InitVulkan();
 void d_VK_BeginFrame();
@@ -38,5 +21,7 @@ void d_VK_CreateVkImage(unsigned* pixels,
 						VkDeviceMemory* vkDeviceMemory,
 						VkImageView* vkImageView,
 						VkDescriptorSet* vkDescriptorSet);
+
+void d_VK_ProcessShader(shader_t* shader);
 
 void d_VK_DrawTris(shaderCommands_t* input);

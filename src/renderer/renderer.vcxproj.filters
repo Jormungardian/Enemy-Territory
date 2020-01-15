@@ -28,6 +28,9 @@
       <UniqueIdentifier>{f0136306-0676-4da1-9570-ff61a47fea88}</UniqueIdentifier>
       <Extensions>.h</Extensions>
     </Filter>
+    <Filter Include="3rdParty">
+      <UniqueIdentifier>{422bd90c-c0c1-49c5-9a67-9f59a6bec854}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <None Include="ref_trin.def">
@@ -335,6 +338,12 @@
     <ClCompile Include="d_vulkan_utils.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="d_vulkan_core.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="3rdParty\map\src\map.c">
+      <Filter>3rdParty</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="anorms256.h">
@@ -573,6 +582,12 @@
     </ClInclude>
     <ClInclude Include="d_vulkan_utils.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="d_vulkan_core.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="3rdParty\map\src\map.h">
+      <Filter>3rdParty</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
