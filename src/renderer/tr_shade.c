@@ -1341,6 +1341,8 @@ static void RB_IterateStagesGeneric( shaderCommands_t *input ) {
 				GL_State( pStage->stateBits );
 			}
 
+			d_VK_DrawTris(input, stage);
+
 			//
 			// draw
 			//
@@ -1518,6 +1520,9 @@ void RB_StageIteratorVertexLitTexture( void ) {
 		qglLockArraysEXT( 0, input->numVertexes );
 		GLimp_LogComment( "glLockArraysEXT\n" );
 	}
+	
+	// This iterator is next!
+	d_VK_DrawTris(input, 0);
 
 	//
 	// call special shade routine
@@ -1728,7 +1733,7 @@ void RB_EndSurface( void ) {
 		DrawNormals( input );
 	}
 
-	d_VK_DrawTris(input);
+	//d_VK_DrawTris(input);
 
 	// clear shader so we can tell we don't have any unclosed surfaces
 	tess.numIndexes = 0;

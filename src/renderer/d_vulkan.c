@@ -10,7 +10,6 @@
 #include "3rdParty/map/src/map.h"
 
 VkPipelineLayout g_DebugWireframePL;
-VkPipeline g_DebugWireframePSO;
 VkDescriptorSetLayout g_DebugDescriptorSetLayout;
 VkDescriptorPool g_DebugDescriptorPool;
 VkSampler g_DebugSampler;
@@ -23,6 +22,10 @@ VkCommandPool g_VkCommandPool;
 
 size_t g_VkTestCommandBuffersCount;
 VkCommandBuffer* g_VkTestCommandBuffers;
+
+#define D_VK_BUFFER_POOL_SIZE 4096
+size_t g_CurrentBufferPoolIndex = 0;
+VkBuffer g_BufferPool[D_VK_BUFFER_POOL_SIZE]; // 2048 Round Robin buffer pool
 
 VkBuffer g_VertexBuffersPoolBuffer;
 VkDeviceMemory g_VertexBuffersPoolDeviceMemory;
@@ -207,7 +210,7 @@ void CreateDebugDescriptorPool()
 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	poolInfo.poolSizeCount = 1;
 	poolInfo.pPoolSizes = &poolSize;
-	poolInfo.maxSets = 1000;
+	poolInfo.maxSets = 4000;
 
 	vkCreateDescriptorPool(g_VkDevice, &poolInfo, NULL, &g_DebugDescriptorPool);
 }
@@ -221,7 +224,7 @@ void CreateSamplers()
 	samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
 	samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
 	samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-	samplerInfo.anisotropyEnable = VK_TRUE;
+	samplerInfo.anisotropyEnable = VK_FALSE;
 	samplerInfo.maxAnisotropy = 16;
 	samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
 	samplerInfo.unnormalizedCoordinates = VK_FALSE;
@@ -254,132 +257,6 @@ void CreatePipelineLayout()
 	}
 }
 
-void CreateDebugPipelines()
-{
-	INIT_STRUCT(VkPipelineShaderStageCreateInfo, vertShaderStageInfo);
-	vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-	vertShaderStageInfo.module = g_OrthoVertShaderModule;
-	vertShaderStageInfo.pName = "main";
-
-	INIT_STRUCT(VkPipelineShaderStageCreateInfo, fragShaderStageInfo);
-	fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-	fragShaderStageInfo.module = g_OrthoFragShaderModule;
-	fragShaderStageInfo.pName = "main";
-
-	VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
-
-	VkVertexInputBindingDescription bindingDescriptions[2];
-	memset(&bindingDescriptions[0], 0, 2 * sizeof(VkVertexInputBindingDescription));
-	// Vertices
-	bindingDescriptions[0].binding = 0;
-	bindingDescriptions[0].stride = sizeof(vec4hack_t);
-	bindingDescriptions[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-	// UVs
-	bindingDescriptions[1].binding = 1;
-	bindingDescriptions[1].stride = sizeof(vec2hack_t);
-	bindingDescriptions[1].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-	VkVertexInputAttributeDescription attributeDescriptions[2];
-	memset(&attributeDescriptions[0], 0, 2 * sizeof(VkVertexInputAttributeDescription));
-	// Vertices
-	attributeDescriptions[0].binding = 0;
-	attributeDescriptions[0].location = 0;
-	attributeDescriptions[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-	attributeDescriptions[0].offset = 0;
-	// UVs
-	attributeDescriptions[1].binding = 1;
-	attributeDescriptions[1].location = 1;
-	attributeDescriptions[1].format = VK_FORMAT_R32G32_SFLOAT;
-	attributeDescriptions[1].offset = 0;
-
-	INIT_STRUCT(VkPipelineVertexInputStateCreateInfo, vertexInputInfo);
-	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	vertexInputInfo.vertexBindingDescriptionCount = 2;
-	vertexInputInfo.vertexAttributeDescriptionCount = 2;
-	vertexInputInfo.pVertexBindingDescriptions = &bindingDescriptions[0];
-	vertexInputInfo.pVertexAttributeDescriptions = &attributeDescriptions[0];
-
-	INIT_STRUCT(VkPipelineInputAssemblyStateCreateInfo, inputAssembly);
-	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-	inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-	inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-	INIT_STRUCT(VkViewport, viewport);
-	viewport.x = 0.0f;
-	viewport.y = 0.0f;
-	viewport.width = (float)g_VkSwapchainExtent.width;
-	viewport.height = (float)g_VkSwapchainExtent.height;
-	viewport.minDepth = 0.0f;
-	viewport.maxDepth = 1.0f;
-
-	INIT_STRUCT(VkRect2D, scissor);
-	scissor.offset.x = 0; 
-	scissor.offset.y = 0;
-	scissor.extent = g_VkSwapchainExtent;
-
-	INIT_STRUCT(VkPipelineViewportStateCreateInfo, viewportState);
-	viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-	viewportState.viewportCount = 1;
-	viewportState.pViewports = &viewport;
-	viewportState.scissorCount = 1;
-	viewportState.pScissors = &scissor;
-
-	INIT_STRUCT(VkPipelineRasterizationStateCreateInfo, rasterizer);
-	rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-	rasterizer.depthClampEnable = VK_FALSE;
-	rasterizer.rasterizerDiscardEnable = VK_FALSE;
-	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-	rasterizer.lineWidth = 1.0f;
-	rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-	rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
-	rasterizer.depthBiasEnable = VK_FALSE;
-
-	INIT_STRUCT(VkPipelineMultisampleStateCreateInfo, multisampling);
-	multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-	multisampling.sampleShadingEnable = VK_FALSE;
-	multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-	INIT_STRUCT(VkPipelineColorBlendAttachmentState, colorBlendAttachment);
-	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-	colorBlendAttachment.blendEnable = VK_FALSE;
-	//colorBlendAttachment.blendEnable = VK_TRUE;
-	//colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
-	//colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-	//colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-
-	INIT_STRUCT(VkPipelineColorBlendStateCreateInfo, colorBlending);
-	colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-	colorBlending.logicOpEnable = VK_FALSE;
-	colorBlending.logicOp = VK_LOGIC_OP_COPY;
-	colorBlending.attachmentCount = 1;
-	colorBlending.pAttachments = &colorBlendAttachment;
-	colorBlending.blendConstants[0] = 0.0f;
-	colorBlending.blendConstants[1] = 0.0f;
-	colorBlending.blendConstants[2] = 0.0f;
-	colorBlending.blendConstants[3] = 0.0f;
-
-	INIT_STRUCT(VkGraphicsPipelineCreateInfo, pipelineInfo);
-	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-	pipelineInfo.stageCount = 2;
-	pipelineInfo.pStages = shaderStages;
-	pipelineInfo.pVertexInputState = &vertexInputInfo;
-	pipelineInfo.pInputAssemblyState = &inputAssembly;
-	pipelineInfo.pViewportState = &viewportState;
-	pipelineInfo.pRasterizationState = &rasterizer;
-	pipelineInfo.pMultisampleState = &multisampling;
-	pipelineInfo.pColorBlendState = &colorBlending;
-	pipelineInfo.layout = g_DebugWireframePL;
-	pipelineInfo.renderPass = g_VkRenderPass;
-	pipelineInfo.subpass = 0;
-	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
-
-	if (vkCreateGraphicsPipelines(g_VkDevice, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &g_DebugWireframePSO) != VK_SUCCESS) {
-		assert(0);
-	}
-}
-
 void CreateTestCommandBuffers()
 {
 	g_VkTestCommandBuffersCount = g_VkSwapchainImageCount;
@@ -399,6 +276,7 @@ void CreateTestCommandBuffers()
 void d_VK_InitVulkan()
 {
 	map_init(&g_Q3ShaderMap);
+	memset(&g_BufferPool[0], 0, D_VK_BUFFER_POOL_SIZE * sizeof(VkBuffer));
 
 	d_VKCore_InitApplication();
 
@@ -414,7 +292,6 @@ void d_VK_InitVulkan()
 	CreateShaderModules();
 
 	CreatePipelineLayout();
-	CreateDebugPipelines();
 
 	CreateTestCommandBuffers();
 
@@ -687,18 +564,32 @@ void d_VK_ProcessShader(shader_t* shader)
 
 VkBlendFactor Q3ToVkSrcBlendFactor(uint32_t s)
 {
-	if ((s & GLS_SRCBLEND_SRC_ALPHA) > 0) return VK_BLEND_FACTOR_SRC_ALPHA;
+	int blendSrcBits = s & GLS_SRCBLEND_BITS;
 
-	assert(0);
+	switch (blendSrcBits) {
+	case GLS_SRCBLEND_SRC_ALPHA:
+		return VK_BLEND_FACTOR_SRC_ALPHA;
+	case GLS_SRCBLEND_DST_COLOR:
+		return VK_BLEND_FACTOR_DST_COLOR;
+	}
+	
+	//assert(0);
 
 	return VK_BLEND_FACTOR_MAX_ENUM;
 }
 
 VkBlendFactor Q3ToVkDstBlendFactor(uint32_t d)
 {
-	if ((d & GLS_DSTBLEND_ONE_MINUS_SRC_ALPHA) > 0) return VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	int blendDstBits = d & GLS_DSTBLEND_BITS;
 
-	assert(0);
+	switch (blendDstBits) {
+	case GLS_DSTBLEND_ONE_MINUS_SRC_ALPHA:
+		return VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	case GLS_DSTBLEND_ONE:
+		return VK_BLEND_FACTOR_ONE;
+	}
+
+	//assert(0);
 
 	return VK_BLEND_FACTOR_MAX_ENUM;
 }
@@ -727,7 +618,7 @@ void GeneratePSOFromShaderStage(char* key, shader_t* shader, size_t stage)
 	bindingDescriptions[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 	// Colors
 	bindingDescriptions[1].binding = 1;
-	bindingDescriptions[1].stride = sizeof(color4ubhack_t);
+	bindingDescriptions[1].stride = sizeof(vec4hack_t);
 	bindingDescriptions[1].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 	// UVs
 	bindingDescriptions[2].binding = 2;
@@ -744,7 +635,7 @@ void GeneratePSOFromShaderStage(char* key, shader_t* shader, size_t stage)
 	// Colors
 	attributeDescriptions[1].binding = 1;
 	attributeDescriptions[1].location = 1;
-	attributeDescriptions[1].format = VK_FORMAT_R8G8B8A8_UNORM;
+	attributeDescriptions[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
 	attributeDescriptions[1].offset = 0;
 	// UVs
 	attributeDescriptions[2].binding = 2;
@@ -801,9 +692,13 @@ void GeneratePSOFromShaderStage(char* key, shader_t* shader, size_t stage)
 
 	INIT_STRUCT(VkPipelineColorBlendAttachmentState, colorBlendAttachment);
 	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-	colorBlendAttachment.blendEnable = shader->stages[stage]->stateBits > 0;
 	colorBlendAttachment.srcColorBlendFactor = Q3ToVkSrcBlendFactor(shader->stages[stage]->stateBits);
 	colorBlendAttachment.dstColorBlendFactor = Q3ToVkDstBlendFactor(shader->stages[stage]->stateBits);
+	colorBlendAttachment.blendEnable = colorBlendAttachment.srcColorBlendFactor != VK_BLEND_FACTOR_MAX_ENUM && colorBlendAttachment.dstColorBlendFactor != VK_BLEND_FACTOR_MAX_ENUM;
+	if (colorBlendAttachment.blendEnable == VK_FALSE) {
+		colorBlendAttachment.srcColorBlendFactor = 0;
+		colorBlendAttachment.dstColorBlendFactor = 0;
+	}
 	colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
 
 	INIT_STRUCT(VkPipelineColorBlendStateCreateInfo, colorBlending);
@@ -838,9 +733,11 @@ void GeneratePSOFromShaderStage(char* key, shader_t* shader, size_t stage)
 	}
 
 	map_set(&g_Q3ShaderMap, key, (void*)pso);
+	OutputDebugString(key);
+	OutputDebugString("\n");
 }
 
-void d_VK_DrawTris(shaderCommands_t* input)
+void d_VK_DrawTris(shaderCommands_t* input, uint32_t stage)
 {
 	fprintf(stderr, "SDFDSF\n");
 	g_currDraw++;
@@ -881,7 +778,7 @@ void d_VK_DrawTris(shaderCommands_t* input)
 
 		INIT_STRUCT(VkBufferCreateInfo, bufferInfo);
 		bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		bufferInfo.size = sizeof(color4ubhack_t) * input->numVertexes;
+		bufferInfo.size = sizeof(vec4hack_t) * input->numVertexes;
 		bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 		bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
@@ -889,13 +786,22 @@ void d_VK_DrawTris(shaderCommands_t* input)
 			assert(0);
 		}
 
+		vec4hack_t* colors = (vec4hack_t*)malloc(input->numVertexes*sizeof(vec4hack_t));
+		for (int i = 0; i < input->numVertexes; ++i) {
+			for (int j = 0; j < 4; ++j) {
+				colors[i].v[j] = input->svars.colors[i][j] / 255.0;
+			}
+		}
+
 		vkBindBufferMemory(g_VkDevice, colorBuffer, g_VertexBuffersPoolDeviceMemory, g_CurrentVertexBufferOffset);
 		void* data;
 		vkMapMemory(g_VkDevice, g_VertexBuffersPoolDeviceMemory, g_CurrentVertexBufferOffset, bufferInfo.size, 0, &data);
-		memcpy(data, input->vertexColors, (size_t)bufferInfo.size);
+		memcpy(data, colors, (size_t)bufferInfo.size);
 		vkUnmapMemory(g_VkDevice, g_VertexBuffersPoolDeviceMemory);
 
-		g_CurrentVertexBufferOffset += sizeof(color4ubhack_t) * input->numVertexes;
+		free(colors);
+
+		g_CurrentVertexBufferOffset += sizeof(vec4hack_t) * input->numVertexes;
 
 		while (g_CurrentVertexBufferOffset % g_VertexBuffersMemoryRequirements.alignment != 0) {
 			g_CurrentVertexBufferOffset++;
@@ -918,7 +824,7 @@ void d_VK_DrawTris(shaderCommands_t* input)
 		vkBindBufferMemory(g_VkDevice, uvsBuffer, g_VertexBuffersPoolDeviceMemory, g_CurrentVertexBufferOffset);
 		void* data;
 		vkMapMemory(g_VkDevice, g_VertexBuffersPoolDeviceMemory, g_CurrentVertexBufferOffset, bufferInfo.size, 0, &data);
-		memcpy(data, input->texCoords0, (size_t)bufferInfo.size);
+		memcpy(data, &input->svars.texcoords[0], (size_t)bufferInfo.size);
 		vkUnmapMemory(g_VkDevice, g_VertexBuffersPoolDeviceMemory);
 
 		g_CurrentVertexBufferOffset += sizeof(vec2hack_t) * input->numVertexes;
@@ -963,49 +869,53 @@ void d_VK_DrawTris(shaderCommands_t* input)
 	if (backEnd.projection2D == qtrue) {
 		float ortho[6] = { glConfig.vidWidth, 0.0, glConfig.vidHeight, 0.0, 1.0, -1.0 };
 
-		for (int i = 0; i < input->shader->numUnfoggedPasses; ++i) {
+		{
+			// Bind an appropriate PSO
 
-			//if (strcmp(input->shader->name, "ui/assets/et_logo_huge_dark") == 0 || strcmp(input->shader->name, "ui/assets/logo_sd_dark") == 0 ) {
-			if (strcmp(input->shader->name, "<default>") != 0 && strcmp(input->shader->name, "ui/assets/et_clouds") != 0) {
-				char key[512];
-				sprintf(&key[0], "%s", input->shader->name);
-				void* data = map_get(&g_Q3ShaderMap, key);
+			char key[512];
+			sprintf(&key[0], "%s:p[%d]", input->shader->name, stage);
+			void* data = map_get(&g_Q3ShaderMap, key);
 
-				if (data == NULL) {
-					// Generate PSO for this shader
+			if (data == NULL) {
+				// Generate PSO for this shader
 
-					// Hardcode generating PSO from shader stage 0
-					GeneratePSOFromShaderStage(key, input->shader, 0);
+				// Hardcode generating PSO from shader stage 0
+				GeneratePSOFromShaderStage(key, input->shader, stage);
 
-					data = map_get(&g_Q3ShaderMap, key);
-				}
-
-				VkPipeline** ppPSO = (VkPipeline * *)data;
-				VkPipeline* pPSO = *ppPSO;
-				vkCmdBindPipeline(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, *pPSO);
-			}
-			else
-			{
-				vkCmdBindPipeline(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, g_DebugWireframePSO);
+				data = map_get(&g_Q3ShaderMap, key);
 			}
 
-			vkCmdPushConstants(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], g_DebugWireframePL, VK_SHADER_STAGE_VERTEX_BIT, 0, 6 * sizeof(float), &ortho[0]);
-
-			{
-				//if (input->shader->numUnfoggedPasses > 0 && input->shader->stages[0]->bundle[0] != NULL && input->shader->stages[0]->bundle[0].image != NULL) 
-				{
-					image_t* img = img = input->shader->stages[i]->bundle[0].image[0];
-
-					vkCmdBindDescriptorSets(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, g_DebugWireframePL, 0, 1, &img->vkDescriptorSet, 0, NULL);
-				}
-			}
-
-			vkCmdDrawIndexed(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], input->numIndexes, 1, 0, 0, 0);
+			VkPipeline** ppPSO = (VkPipeline * *)data;
+			VkPipeline* pPSO = *ppPSO;
+			vkCmdBindPipeline(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, *pPSO);
 		}
+
+		vkCmdPushConstants(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], g_DebugWireframePL, VK_SHADER_STAGE_VERTEX_BIT, 0, 6 * sizeof(float), &ortho[0]);
+
+		{
+			//if (input->shader->numUnfoggedPasses > 0 && input->shader->stages[0]->bundle[0] != NULL && input->shader->stages[0]->bundle[0].image != NULL) 
+			{
+				image_t* img = img = input->shader->stages[stage]->bundle[0].image[0];
+
+				vkCmdBindDescriptorSets(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, g_DebugWireframePL, 0, 1, &img->vkDescriptorSet, 0, NULL);
+			}
+		}
+
+		vkCmdDrawIndexed(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], input->numIndexes, 1, 0, 0, 0);
 	}
 	else {
 		// TODO: Create a PSO for 3D
 	}
 	
-	//vkCmdDraw(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], input->numVertexes, 1, 0, 0);
+	// Queue up buffers to be freed and free old ones in round robin way
+	// TODO: Better, and/or threaded
+	VkBuffer freeBuffers[] = { vertexBuffer, colorBuffer, uvsBuffer, indexBuffer };
+	for (int i = 0; i < 4; ++i) {
+		if (g_BufferPool[g_CurrentBufferPoolIndex] != VK_NULL_HANDLE) {
+			vkDestroyBuffer(g_VkDevice, g_BufferPool[g_CurrentBufferPoolIndex], NULL);
+		}
+
+		g_BufferPool[g_CurrentBufferPoolIndex] = freeBuffers[i];
+		g_CurrentBufferPoolIndex = (g_CurrentBufferPoolIndex + 1) % D_VK_BUFFER_POOL_SIZE;
+	}
 }

@@ -24,4 +24,4 @@ void d_VK_CreateVkImage(unsigned* pixels,
 
 void d_VK_ProcessShader(shader_t* shader);
 
-void d_VK_DrawTris(shaderCommands_t* input);
+void d_VK_DrawTris(shaderCommands_t* input, uint32_t stage);
