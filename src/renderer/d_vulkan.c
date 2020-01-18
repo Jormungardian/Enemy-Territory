@@ -9,7 +9,8 @@
 
 #include "3rdParty/map/src/map.h"
 
-VkPipelineLayout g_DebugWireframePL;
+VkPipelineLayout g_OrthoPipelineLayout;
+VkPipelineLayout g_PerspPipelineLayout;
 VkDescriptorSetLayout g_DebugDescriptorSetLayout;
 VkDescriptorPool g_DebugDescriptorPool;
 VkSampler g_DebugSampler;
@@ -23,7 +24,7 @@ VkCommandPool g_VkCommandPool;
 size_t g_VkTestCommandBuffersCount;
 VkCommandBuffer* g_VkTestCommandBuffers;
 
-#define D_VK_BUFFER_POOL_SIZE 4096
+#define D_VK_BUFFER_POOL_SIZE 14096
 size_t g_CurrentBufferPoolIndex = 0;
 VkBuffer g_BufferPool[D_VK_BUFFER_POOL_SIZE]; // 2048 Round Robin buffer pool
 
@@ -40,6 +41,7 @@ size_t g_CurrentIndexBufferOffset;
 map_void_t g_Q3ShaderMap;
 
 VkShaderModule g_OrthoVertShaderModule;
+VkShaderModule g_PerspVertShaderModule;
 VkShaderModule g_OrthoFragShaderModule;
 
 ///////////////////////////
@@ -127,7 +129,7 @@ void CreateFramebuffers()
 		framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 		framebufferInfo.renderPass = g_VkRenderPass;
 		framebufferInfo.attachmentCount = 1;
-		framebufferInfo.pAttachments = attachments;
+		framebufferInfo.pAttachments = &attachments[0];
 		framebufferInfo.width = g_VkSwapchainExtent.width;
 		framebufferInfo.height = g_VkSwapchainExtent.height;
 		framebufferInfo.layers = 1;
@@ -168,18 +170,23 @@ VkShaderModule CreateShaderModule(char* shaderCode, size_t codeSize)
 
 void CreateShaderModules()
 {
-	size_t vertShaderCodeSize = 0;
+	size_t vertOrthoShaderCodeSize = 0;
+	size_t vertPerspShaderCodeSize = 0;
 	size_t fragShaderCodeSize = 0;
-	char* vertShaderCode = NULL;
+	char* vertOrthoShaderCode = NULL;
+	char* vertPerspShaderCode = NULL;
 	char* fragShaderCode = NULL;
 
-	vertShaderCode = ReadBinaryFile("shaders/vert.spv", &vertShaderCodeSize);
+	vertOrthoShaderCode = ReadBinaryFile("shaders/vert_ortho.spv", &vertOrthoShaderCodeSize);
+	vertPerspShaderCode = ReadBinaryFile("shaders/vert_persp.spv", &vertPerspShaderCodeSize);
 	fragShaderCode = ReadBinaryFile("shaders/frag.spv", &fragShaderCodeSize);
 
-	g_OrthoVertShaderModule = CreateShaderModule(vertShaderCode, vertShaderCodeSize);
+	g_OrthoVertShaderModule = CreateShaderModule(vertOrthoShaderCode, vertOrthoShaderCodeSize);
+	g_PerspVertShaderModule = CreateShaderModule(vertPerspShaderCode, vertPerspShaderCodeSize);
 	g_OrthoFragShaderModule = CreateShaderModule(fragShaderCode, fragShaderCodeSize);
 
-	free(vertShaderCode);
+	free(vertOrthoShaderCode);
+	free(vertPerspShaderCode);
 	free(fragShaderCode);
 }
 
@@ -240,20 +247,42 @@ void CreateSamplers()
 
 void CreatePipelineLayout()
 {
-	VkPushConstantRange pushConstantRange;
-	pushConstantRange.offset = 0;
-	pushConstantRange.size = 6 * sizeof(float);
-	pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	// Ortho
+	{
+		VkPushConstantRange pushConstantRange;
+		pushConstantRange.offset = 0;
+		pushConstantRange.size = 6 * sizeof(float);
+		pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-	INIT_STRUCT(VkPipelineLayoutCreateInfo, pipelineLayoutInfo);
-	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	pipelineLayoutInfo.setLayoutCount = 1;
-	pipelineLayoutInfo.pSetLayouts = &g_DebugDescriptorSetLayout;
-	pipelineLayoutInfo.pushConstantRangeCount = 1;
-	pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+		INIT_STRUCT(VkPipelineLayoutCreateInfo, pipelineLayoutInfo);
+		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		pipelineLayoutInfo.setLayoutCount = 1;
+		pipelineLayoutInfo.pSetLayouts = &g_DebugDescriptorSetLayout;
+		pipelineLayoutInfo.pushConstantRangeCount = 1;
+		pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
-	if (vkCreatePipelineLayout(g_VkDevice, &pipelineLayoutInfo, NULL, &g_DebugWireframePL) != VK_SUCCESS) {
-		assert(0);
+		if (vkCreatePipelineLayout(g_VkDevice, &pipelineLayoutInfo, NULL, &g_OrthoPipelineLayout) != VK_SUCCESS) {
+			assert(0);
+		}
+	}
+
+	// Persp
+	{
+		VkPushConstantRange pushConstantRange;
+		pushConstantRange.offset = 0;
+		pushConstantRange.size = 32 * sizeof(float);
+		pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+		INIT_STRUCT(VkPipelineLayoutCreateInfo, pipelineLayoutInfo);
+		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		pipelineLayoutInfo.setLayoutCount = 1;
+		pipelineLayoutInfo.pSetLayouts = &g_DebugDescriptorSetLayout;
+		pipelineLayoutInfo.pushConstantRangeCount = 1;
+		pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
+
+		if (vkCreatePipelineLayout(g_VkDevice, &pipelineLayoutInfo, NULL, &g_PerspPipelineLayout) != VK_SUCCESS) {
+			assert(0);
+		}
 	}
 }
 
@@ -599,7 +628,7 @@ void GeneratePSOFromShaderStage(char* key, shader_t* shader, size_t stage)
 	INIT_STRUCT(VkPipelineShaderStageCreateInfo, vertShaderStageInfo);
 	vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-	vertShaderStageInfo.module = g_OrthoVertShaderModule;
+	vertShaderStageInfo.module = backEnd.projection2D == qtrue ? g_OrthoVertShaderModule : g_PerspVertShaderModule;
 	vertShaderStageInfo.pName = "main";
 
 	INIT_STRUCT(VkPipelineShaderStageCreateInfo, fragShaderStageInfo);
@@ -712,6 +741,12 @@ void GeneratePSOFromShaderStage(char* key, shader_t* shader, size_t stage)
 	colorBlending.blendConstants[2] = 0.0f;
 	colorBlending.blendConstants[3] = 0.0f;
 
+	INIT_STRUCT(VkPipelineDynamicStateCreateInfo, dynamicInfo);
+	dynamicInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+	dynamicInfo.dynamicStateCount = 2;
+	VkDynamicState ds[2] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+	dynamicInfo.pDynamicStates = &ds[0];
+
 	INIT_STRUCT(VkGraphicsPipelineCreateInfo, pipelineInfo);
 	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 	pipelineInfo.stageCount = 2;
@@ -722,7 +757,8 @@ void GeneratePSOFromShaderStage(char* key, shader_t* shader, size_t stage)
 	pipelineInfo.pRasterizationState = &rasterizer;
 	pipelineInfo.pMultisampleState = &multisampling;
 	pipelineInfo.pColorBlendState = &colorBlending;
-	pipelineInfo.layout = g_DebugWireframePL;
+	pipelineInfo.pDynamicState = backEnd.projection2D ? NULL : &dynamicInfo;
+	pipelineInfo.layout = backEnd.projection2D ? g_OrthoPipelineLayout : g_PerspPipelineLayout;
 	pipelineInfo.renderPass = g_VkRenderPass;
 	pipelineInfo.subpass = 0;
 	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
@@ -866,47 +902,65 @@ void d_VK_DrawTris(shaderCommands_t* input, uint32_t stage)
 
 	vkCmdBindIndexBuffer(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
-	if (backEnd.projection2D == qtrue) {
-		float ortho[6] = { glConfig.vidWidth, 0.0, glConfig.vidHeight, 0.0, 1.0, -1.0 };
+	{
+		// Bind an appropriate PSO
 
-		{
-			// Bind an appropriate PSO
+		char key[512];
+		sprintf(&key[0], "%s:p[%d]:%d", input->shader->name, stage, backEnd.projection2D);
+		void* data = map_get(&g_Q3ShaderMap, key);
 
-			char key[512];
-			sprintf(&key[0], "%s:p[%d]", input->shader->name, stage);
-			void* data = map_get(&g_Q3ShaderMap, key);
+		if (data == NULL) {
+			// Generate PSO for this shader
 
-			if (data == NULL) {
-				// Generate PSO for this shader
+			// Hardcode generating PSO from shader stage 0
+			GeneratePSOFromShaderStage(key, input->shader, stage);
 
-				// Hardcode generating PSO from shader stage 0
-				GeneratePSOFromShaderStage(key, input->shader, stage);
-
-				data = map_get(&g_Q3ShaderMap, key);
-			}
-
-			VkPipeline** ppPSO = (VkPipeline * *)data;
-			VkPipeline* pPSO = *ppPSO;
-			vkCmdBindPipeline(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, *pPSO);
+			data = map_get(&g_Q3ShaderMap, key);
 		}
 
-		vkCmdPushConstants(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], g_DebugWireframePL, VK_SHADER_STAGE_VERTEX_BIT, 0, 6 * sizeof(float), &ortho[0]);
+		VkPipeline** ppPSO = (VkPipeline * *)data;
+		VkPipeline* pPSO = *ppPSO;
+		vkCmdBindPipeline(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, *pPSO);
+	}
 
+	if (backEnd.projection2D == qtrue) {
 		{
-			//if (input->shader->numUnfoggedPasses > 0 && input->shader->stages[0]->bundle[0] != NULL && input->shader->stages[0]->bundle[0].image != NULL) 
 			{
 				image_t* img = img = input->shader->stages[stage]->bundle[0].image[0];
 
-				vkCmdBindDescriptorSets(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, g_DebugWireframePL, 0, 1, &img->vkDescriptorSet, 0, NULL);
+				vkCmdBindDescriptorSets(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, g_OrthoPipelineLayout, 0, 1, &img->vkDescriptorSet, 0, NULL);
 			}
 		}
 
-		vkCmdDrawIndexed(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], input->numIndexes, 1, 0, 0, 0);
+		float ortho[6] = { glConfig.vidWidth, 0.0, glConfig.vidHeight, 0.0, 1.0, -1.0 };
+		vkCmdPushConstants(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], g_OrthoPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, 6 * sizeof(float), &ortho[0]);
+
 	}
 	else {
-		// TODO: Create a PSO for 3D
+		{
+			{
+				image_t* img = img = input->shader->stages[stage]->bundle[0].image[0];
+
+				vkCmdBindDescriptorSets(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, g_PerspPipelineLayout, 0, 1, &img->vkDescriptorSet, 0, NULL);
+			}
+		}
+
+		float mats[32];
+		memcpy(&mats[0], &backEnd.viewParms.projectionMatrix[0], 16 * sizeof(float));
+		memcpy(&mats[16], &backEnd.orientation.modelMatrix[0], 16 * sizeof(float));
+		mats[5] *= -1.0; // Flip Y axis OGL -> VK
+		vkCmdPushConstants(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], g_PerspPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, 32 * sizeof(float), &mats[0]);
+
+		INIT_STRUCT(VkViewport, vp);
+		vp.x = backEnd.viewParms.viewportX;
+		vp.y = g_VkSwapchainExtent.height - backEnd.viewParms.viewportY - backEnd.viewParms.viewportHeight; // Viewport x,y in GL is lower left corner as opposed to upper left
+		vp.width = backEnd.viewParms.viewportWidth;
+		vp.height = backEnd.viewParms.viewportHeight;
+		vkCmdSetViewport(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], 0, 1, &vp);
 	}
-	
+
+	vkCmdDrawIndexed(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], input->numIndexes, 1, 0, 0, 0);
+
 	// Queue up buffers to be freed and free old ones in round robin way
 	// TODO: Better, and/or threaded
 	VkBuffer freeBuffers[] = { vertexBuffer, colorBuffer, uvsBuffer, indexBuffer };
