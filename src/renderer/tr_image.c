@@ -959,7 +959,7 @@ image_t *R_CreateImage( const char *name, const byte *pic, int width, int height
 
 	GL_Bind( image );
 
-	d_VK_CreateVkImage((unsigned*)pic,
+	d_VK_CreateImage((unsigned*)pic,
 						image->width, image->height,
 						image->mipmap,
 						allowPicmip,
@@ -3185,6 +3185,8 @@ R_PurgeImage
 ===============
 */
 void R_PurgeImage( image_t *image ) {
+
+	d_VK_DestroyImage(image);
 
 	//%	texnumImages[image->texnum - 1024] = NULL;
 

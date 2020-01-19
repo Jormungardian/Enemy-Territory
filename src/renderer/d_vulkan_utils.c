@@ -28,7 +28,7 @@ uint32_t FindMemoryType(uint32_t typeBits, VkMemoryPropertyFlags properties)
 	return 0;
 }
 
-void d_VK_CreateBuffer(VkDevice* device, VkBufferCreateInfo* bufferInfo, VkBuffer* buffer, VkDeviceMemory* deviceMemory, VkMemoryRequirements* memRequirements)
+void d_VKUtils_CreateBuffer(VkDevice* device, VkBufferCreateInfo* bufferInfo, VkBuffer* buffer, VkDeviceMemory* deviceMemory, VkMemoryRequirements* memRequirements)
 {
 	if (vkCreateBuffer(*device, bufferInfo, NULL, buffer) != VK_SUCCESS) {
 		assert(0);
@@ -49,7 +49,7 @@ void d_VK_CreateBuffer(VkDevice* device, VkBufferCreateInfo* bufferInfo, VkBuffe
 	vkBindBufferMemory(*device, *buffer, *deviceMemory, 0);
 }
 
-void d_Vk_CreateImage(VkDevice* device, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage const* image, VkDeviceMemory const* imageMemory, VkImageView const* imageView) {
+void d_VKUtils_CreateImage(VkDevice* device, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage const* image, VkDeviceMemory const* imageMemory) {
 	INIT_STRUCT(VkImageCreateInfo, imageInfo);
 	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 	imageInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -65,7 +65,7 @@ void d_Vk_CreateImage(VkDevice* device, uint32_t width, uint32_t height, VkForma
 	imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 	imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-	vkCreateImage(*device, &imageInfo, NULL, image);
+	VK_CHECK_RESULT(vkCreateImage(*device, &imageInfo, NULL, image));
 
 	VkMemoryRequirements memRequirements;
 	vkGetImageMemoryRequirements(*device, *image, &memRequirements);
@@ -75,9 +75,9 @@ void d_Vk_CreateImage(VkDevice* device, uint32_t width, uint32_t height, VkForma
 	allocInfo.allocationSize = memRequirements.size;
 	allocInfo.memoryTypeIndex = FindMemoryType(memRequirements.memoryTypeBits, properties);
 
-	vkAllocateMemory(*device, &allocInfo, NULL, imageMemory);
+	VK_CHECK_RESULT(vkAllocateMemory(*device, &allocInfo, NULL, imageMemory));
 
-	vkBindImageMemory(*device, *image, *imageMemory, 0);
+	VK_CHECK_RESULT(vkBindImageMemory(*device, *image, *imageMemory, 0));
 }
 
 inline VkCommandBufferAllocateInfo commandBufferAllocateInfo(
@@ -93,7 +93,7 @@ inline VkCommandBufferAllocateInfo commandBufferAllocateInfo(
 	return commandBufferAllocateInfo;
 }
 
-VkCommandBuffer d_VK_CreateCommandBuffer(VkDevice* device, VkCommandPool* commandPool, VkCommandBufferLevel level, VkBool32 begin)
+VkCommandBuffer d_VKUtils_CreateCommandBuffer(VkDevice* device, VkCommandPool* commandPool, VkCommandBufferLevel level, VkBool32 begin)
 {
 	VkCommandBufferAllocateInfo cmdBufAllocateInfo = commandBufferAllocateInfo(*commandPool, level, 1);
 
@@ -111,7 +111,7 @@ VkCommandBuffer d_VK_CreateCommandBuffer(VkDevice* device, VkCommandPool* comman
 	return cmdBuffer;
 }
 
-void d_VK_FlushCommandBuffer(VkDevice device, VkCommandPool commandPool, VkCommandBuffer commandBuffer, VkQueue queue, VkBool32 free)
+void d_VKUtils_FlushCommandBuffer(VkDevice device, VkCommandPool commandPool, VkCommandBuffer commandBuffer, VkQueue queue, VkBool32 free)
 {
 	if (commandBuffer == VK_NULL_HANDLE)
 	{

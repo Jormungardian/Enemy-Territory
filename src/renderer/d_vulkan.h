@@ -8,7 +8,7 @@ void d_VK_InitVulkan();
 void d_VK_BeginFrame();
 void d_VK_EndFrame();
 
-void d_VK_CreateVkImage(unsigned* pixels,
+void d_VK_CreateImage(unsigned* pixels,
 						int32_t width, int32_t height,
 						VkBool32 mipmap,
 						VkBool32 picmip,
@@ -22,6 +22,6 @@ void d_VK_CreateVkImage(unsigned* pixels,
 						VkImageView* vkImageView,
 						VkDescriptorSet* vkDescriptorSet);
 
-void d_VK_ProcessShader(shader_t* shader);
+void d_VK_DestroyImage(image_t* image);
 
 void d_VK_DrawTris(shaderCommands_t* input, uint32_t stage);
