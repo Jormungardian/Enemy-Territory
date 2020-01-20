@@ -1,6 +1,13 @@
 src/Debug
+src/Release
 src/botlib/Debug
+src/botlib/Release
 src/splines/Debug
+src/splines/Release
 src/renderer/Debug
+src/renderer/Release
+src/cgame/Release
+src/game/Release
+src/ui/Release
 src/curl-7.12.2/lib
 src/.vs
