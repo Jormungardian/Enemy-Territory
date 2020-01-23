@@ -1521,7 +1521,6 @@ void RB_StageIteratorVertexLitTexture( void ) {
 		GLimp_LogComment( "glLockArraysEXT\n" );
 	}
 	
-	// This iterator is next!
 	d_VK_DrawTris(input, 0);
 
 	//
@@ -1638,6 +1637,8 @@ void RB_StageIteratorLightmappedMultitexture( void ) {
 		GLimp_LogComment( "glLockArraysEXT\n" );
 	}
 
+	d_VK_DrawTris(input, 0);
+
 	R_DrawElements( input->numIndexes, input->indexes );
 
 	//
@@ -1732,8 +1733,6 @@ void RB_EndSurface( void ) {
 	if ( r_shownormals->integer ) {
 		DrawNormals( input );
 	}
-
-	//d_VK_DrawTris(input);
 
 	// clear shader so we can tell we don't have any unclosed surfaces
 	tess.numIndexes = 0;

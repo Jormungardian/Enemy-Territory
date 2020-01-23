@@ -66,7 +66,7 @@
       <WarningLevel>Level3</WarningLevel>
       <SuppressStartupBanner>true</SuppressStartupBanner>
       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
-      <AdditionalIncludeDirectories>E:\Development\glfw-3.3\include;C:\VulkanSDK\1.1.130.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>E:\Development\glfw-3.3\include;C:\VulkanSDK\1.1.130.0\Include;E:\Development\cglm\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <CompileAs>Default</CompileAs>
     </ClCompile>
     <ResourceCompile>
@@ -76,8 +76,8 @@
     <Lib>
       <OutputFile>.\Debug\renderer.lib</OutputFile>
       <SuppressStartupBanner>true</SuppressStartupBanner>
-      <AdditionalDependencies>glfw3dll.lib;vulkan-1.lib</AdditionalDependencies>
-      <AdditionalLibraryDirectories>E:\Development\glfw-3.3\lib-vc2019;C:\VulkanSDK\1.1.130.0\Lib32;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>glfw3dll.lib;vulkan-1.lib;cglm.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>E:\Development\glfw-3.3\lib-vc2019;C:\VulkanSDK\1.1.130.0\Lib32;E:\Development\cglm\win\Debug;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Lib>
     <ProjectReference>
       <LinkLibraryDependencies>false</LinkLibraryDependencies>
@@ -189,6 +189,7 @@
     <ClCompile Include="..\win32\win_qgl.c" />
     <ClCompile Include="3rdParty\map\src\map.c" />
     <ClCompile Include="d_vulkan.c" />
+    <ClCompile Include="d_vulkan_allocation.c" />
     <ClCompile Include="d_vulkan_core.c" />
     <ClCompile Include="d_vulkan_utils.c" />
     <ClCompile Include="tr_animation_mdm.c" />
@@ -295,6 +296,7 @@
     <ClInclude Include="3rdParty\map\src\map.h" />
     <ClInclude Include="anorms256.h" />
     <ClInclude Include="d_vulkan.h" />
+    <ClInclude Include="d_vulkan_allocation.h" />
     <ClInclude Include="d_vulkan_core.h" />
     <ClInclude Include="d_vulkan_utils.h" />
     <ClInclude Include="qgl.h" />
