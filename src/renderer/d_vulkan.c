@@ -624,7 +624,7 @@ void d_VK_BeginFrame()
 void d_VK_EndFrame()
 {
 	// Draw debug stuff if any.
-	DrawDebugRT("depthrt", g_testDepth, 10, 10, 400, 300);
+	// DrawDebugRT("depthrt", g_testDepth, 10, 10, 400, 300);
 
 	// End recording of 2D command buffer
 	vkCmdEndRenderPass(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex]);
@@ -971,33 +971,33 @@ void GeneratePSOFromShaderStage(char* key, shader_t* shader, size_t stage)
 	INIT_STRUCT(VkPipelineRasterizationStateCreateInfo, rasterizer);
 	rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
 	rasterizer.depthClampEnable = VK_FALSE;
+	rasterizer.depthBiasEnable = VK_FALSE;
 	rasterizer.rasterizerDiscardEnable = VK_FALSE;
-	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;// backEnd.projection2D ? VK_POLYGON_MODE_FILL : VK_POLYGON_MODE_LINE;
+	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
 	rasterizer.lineWidth = 1.0f;
 	rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
-	rasterizer.depthBiasEnable = VK_FALSE;
 	rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-	//if (glState.faceCulling == CT_TWO_SIDED) {
-	//	rasterizer.cullMode = VK_CULL_MODE_NONE;
-	//}
-	//else {
-	//	if (glState.faceCulling == CT_BACK_SIDED) {
-	//		if (backEnd.viewParms.isMirror) {
-	//			rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
-	//		}
-	//		else {
-	//			rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-	//		}
-	//	}
-	//	else {
-	//		if (backEnd.viewParms.isMirror) {
-	//			rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-	//		}
-	//		else {
-	//			rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
-	//		}
-	//	}
-	//}
+	/*if (glState.faceCulling == CT_TWO_SIDED) {
+		rasterizer.cullMode = VK_CULL_MODE_NONE;
+	}
+	else {
+		if (glState.faceCulling == CT_BACK_SIDED) {
+			if (backEnd.viewParms.isMirror) {
+				rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
+			}
+			else {
+				rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+			}
+		}
+		else {
+			if (backEnd.viewParms.isMirror) {
+				rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+			}
+			else {
+				rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
+			}
+		}
+	}*/
 
 	INIT_STRUCT(VkPipelineMultisampleStateCreateInfo, multisampling);
 	multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -1008,13 +1008,7 @@ void GeneratePSOFromShaderStage(char* key, shader_t* shader, size_t stage)
 	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 	colorBlendAttachment.srcColorBlendFactor = Q3ToVkSrcBlendFactor(shader->stages[stage]->stateBits);
 	colorBlendAttachment.dstColorBlendFactor = Q3ToVkDstBlendFactor(shader->stages[stage]->stateBits);
-	// TODO: HANDLE THIS PROPERLY. IF OBJECT HAS BLEND WE'LL NEED TWO PASS, ONE TO WRITE TO DEPTH AND NO COLOR WRITE AND ONE FOR WRITING TO COLOR WITH BLEND
-	if (backEnd.projection2D) {
-		colorBlendAttachment.blendEnable = colorBlendAttachment.srcColorBlendFactor != VK_BLEND_FACTOR_MAX_ENUM && colorBlendAttachment.dstColorBlendFactor != VK_BLEND_FACTOR_MAX_ENUM;
-	}
-	else {
-		colorBlendAttachment.blendEnable = VK_FALSE;
-	}
+	colorBlendAttachment.blendEnable = colorBlendAttachment.srcColorBlendFactor != VK_BLEND_FACTOR_MAX_ENUM && colorBlendAttachment.dstColorBlendFactor != VK_BLEND_FACTOR_MAX_ENUM;
 	if (colorBlendAttachment.blendEnable == VK_FALSE) {
 		colorBlendAttachment.srcColorBlendFactor = 0;
 		colorBlendAttachment.dstColorBlendFactor = 0;
@@ -1090,17 +1084,23 @@ glm_vkperspective(float fovy,
 	dest[3][2] = (nearVal * farVal) / (nearVal - farVal);
 }
 
-void d_VK_DrawTris(shaderCommands_t* input, uint32_t stage)
+void d_VK_DrawTris(shaderCommands_t* input, uint32_t stage, VkBool32 useTexCoords0)
 {
-	if (!backEnd.projection2D && g_3Ddraws > 30)
-		return;
+	//if (strcmp(input->shader->name, "models/players/hud/allied_soldier") != 0)
+	//	return;
+	/*if (!backEnd.projection2D && g_3Ddraws > 30)
+		return;*/
 
 	// Pick what command buffer this call will go into, for now just 2D/3D. Eventually we'll split 3D Scene, Arm/Weapon, Avatar health indicator.
 	VkCommandBuffer commandBuffer = g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex];
 
 	VkBuffer vertexBuffer = d_VKAllocation_AcquireChunk(g_VkDevice, &g_VertexAttribsAllocation, input->xyz, sizeof(vec4hack_t)*input->numVertexes);
-	VkBuffer uvsBuffer = d_VKAllocation_AcquireChunk(g_VkDevice, &g_VertexAttribsAllocation, &input->svars.texcoords[0], sizeof(vec2hack_t) * input->numVertexes);
 	VkBuffer indexBuffer = d_VKAllocation_AcquireChunk(g_VkDevice, &g_IndexAllocation, input->indexes, sizeof(int) * input->numIndexes);
+	VkBuffer uvsBuffer = VK_NULL_HANDLE;
+	if (useTexCoords0)
+		uvsBuffer = d_VKAllocation_AcquireChunk(g_VkDevice, &g_VertexAttribsAllocation, input->texCoords0, sizeof(vec2hack_t) * input->numVertexes);
+	else
+		uvsBuffer = d_VKAllocation_AcquireChunk(g_VkDevice, &g_VertexAttribsAllocation, &input->svars.texcoords[0], sizeof(vec2hack_t) * input->numVertexes);
 
 	// TODO: THIS WAS A TEST, NOT NEEDED, REVERT!
 	vec4hack_t* colors = (vec4hack_t*)malloc(input->numVertexes * sizeof(vec4hack_t));

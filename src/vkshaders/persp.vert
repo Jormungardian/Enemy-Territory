@@ -25,5 +25,4 @@ void main() {
     outUV = uvs;
     outVertColor = inVertColor;
     gl_Position = glCorrection*pushConsts.p*pushConsts.m*vec4(inPosition.xyz, 1.0);
-    gl_Position.z = 0.5;
 }

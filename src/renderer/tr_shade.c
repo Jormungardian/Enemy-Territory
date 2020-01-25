@@ -1341,7 +1341,7 @@ static void RB_IterateStagesGeneric( shaderCommands_t *input ) {
 				GL_State( pStage->stateBits );
 			}
 
-			d_VK_DrawTris(input, stage);
+			d_VK_DrawTris(input, stage, VK_FALSE);
 
 			//
 			// draw
@@ -1521,7 +1521,7 @@ void RB_StageIteratorVertexLitTexture( void ) {
 		GLimp_LogComment( "glLockArraysEXT\n" );
 	}
 	
-	d_VK_DrawTris(input, 0);
+	d_VK_DrawTris(input, 0, VK_TRUE);
 
 	//
 	// call special shade routine
@@ -1637,7 +1637,7 @@ void RB_StageIteratorLightmappedMultitexture( void ) {
 		GLimp_LogComment( "glLockArraysEXT\n" );
 	}
 
-	d_VK_DrawTris(input, 0);
+	d_VK_DrawTris(input, 0, VK_TRUE);
 
 	R_DrawElements( input->numIndexes, input->indexes );
 
