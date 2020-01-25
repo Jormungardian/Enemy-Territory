@@ -23,12 +23,14 @@ VkImageView g_testDepth;
 
 ///////////////////////////
 
-VkRenderPass g_VkRenderPass;
-VkFramebuffer* g_VkFramebuffers;
 VkCommandPool g_VkCommandPool;
 
-size_t g_VkTestCommandBuffersCount;
-VkCommandBuffer* g_VkTestCommandBuffers;
+//////////////////////////////////////////////
+// Swapchain constructs
+VkFramebuffer* g_SwapchainFramebuffers;
+VkRenderPass g_SwapchainRenderPass;
+VkCommandBuffer* g_SwapchainCommandBuffers;
+//////////////////////////////////////////////
 
 #define D_VK_BUFFER_POOL_SIZE 4096
 size_t g_CurrentBufferPoolIndex = 0;
@@ -124,7 +126,7 @@ void CreateRenderPass()
 	renderPassInfo.dependencyCount = 1;
 	renderPassInfo.pDependencies = &dependency;
 
-	VK_CHECK_RESULT(vkCreateRenderPass(g_VkDevice, &renderPassInfo, NULL, &g_VkRenderPass));
+	VK_CHECK_RESULT(vkCreateRenderPass(g_VkDevice, &renderPassInfo, NULL, &g_SwapchainRenderPass));
 }
 
 void CreateFramebuffers() 
@@ -145,7 +147,7 @@ void CreateFramebuffers()
 	depthViewCI.subresourceRange.layerCount = 1;
 	VK_CHECK_RESULT(vkCreateImageView(g_VkDevice, &depthViewCI, NULL, &g_testDepth));
 
-	g_VkFramebuffers = (VkFramebuffer*)malloc(g_VkSwapchainImageCount * sizeof(VkFramebuffer));
+	g_SwapchainFramebuffers = (VkFramebuffer*)malloc(g_VkSwapchainImageCount * sizeof(VkFramebuffer));
 
 	for (size_t i = 0; i < g_VkSwapchainImageCount; i++) {
 		VkImageView attachments[] = {
@@ -156,14 +158,14 @@ void CreateFramebuffers()
 		VkFramebufferCreateInfo framebufferInfo;
 		memset(&framebufferInfo, 0, sizeof(VkFramebufferCreateInfo));
 		framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-		framebufferInfo.renderPass = g_VkRenderPass;
+		framebufferInfo.renderPass = g_SwapchainRenderPass;
 		framebufferInfo.attachmentCount = 2;
 		framebufferInfo.pAttachments = &attachments[0];
 		framebufferInfo.width = g_VkSwapchainExtent.width;
 		framebufferInfo.height = g_VkSwapchainExtent.height;
 		framebufferInfo.layers = 1;
 
-		VK_CHECK_RESULT(vkCreateFramebuffer(g_VkDevice, &framebufferInfo, NULL, &g_VkFramebuffers[i]));
+		VK_CHECK_RESULT(vkCreateFramebuffer(g_VkDevice, &framebufferInfo, NULL, &g_SwapchainFramebuffers[i]));
 	}
 }
 
@@ -343,10 +345,9 @@ void CreatePipelineLayout()
 	}
 }
 
-void CreateTestCommandBuffers()
+void CreateCommandBuffers()
 {
-	g_VkTestCommandBuffersCount = g_VkSwapchainImageCount;
-	g_VkTestCommandBuffers = (VkCommandBuffer*)malloc(g_VkTestCommandBuffersCount * sizeof(VkCommandBuffer));
+	g_SwapchainCommandBuffers = (VkCommandBuffer*)malloc(g_VkSwapchainImageCount * sizeof(VkCommandBuffer));
 
 	INIT_STRUCT(VkCommandBufferAllocateInfo, allocInfo)
 	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -354,7 +355,7 @@ void CreateTestCommandBuffers()
 	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 	allocInfo.commandBufferCount = 3;
 
-	if (vkAllocateCommandBuffers(g_VkDevice, &allocInfo, g_VkTestCommandBuffers) != VK_SUCCESS) {
+	if (vkAllocateCommandBuffers(g_VkDevice, &allocInfo, g_SwapchainCommandBuffers) != VK_SUCCESS) {
 		printf("Failed to allocate test command buffer!\n");
 	}
 }
@@ -488,7 +489,7 @@ void GenerateDebugDepthRTPSO(char* key)
 	pipelineInfo.pColorBlendState = &colorBlending;
 	pipelineInfo.pDepthStencilState = &depthInfo;
 	pipelineInfo.layout = g_OrthoPipelineLayout;
-	pipelineInfo.renderPass = g_VkRenderPass;
+	pipelineInfo.renderPass = g_SwapchainRenderPass;
 	pipelineInfo.subpass = 0;
 	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
@@ -522,7 +523,7 @@ void d_VK_InitVulkan()
 
 	CreatePipelineLayout();
 
-	CreateTestCommandBuffers();
+	CreateCommandBuffers();
 
 	d_VKAllocation_Init(g_VkDevice, &g_VertexAttribsAllocation, 68435456, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 	d_VKAllocation_Init(g_VkDevice, &g_IndexAllocation, 68435456, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
@@ -533,7 +534,7 @@ void d_VK_InitVulkan()
 
 void DrawDebugRT(char* psoKey, VkImageView imageView, uint32_t x, uint32_t y, uint32_t w, uint32_t h)
 {
-	VkCommandBuffer commandBuffer = g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex]; // TODO: When I split 2D into another CB this needs to change!
+	VkCommandBuffer commandBuffer = g_SwapchainCommandBuffers[g_CurrentSwapchainImageIndex]; // TODO: When I split 2D into another CB this needs to change!
 
 	vec4hack_t verts[] = { {x,  y, 0.0, 0.0},
 						   {x + w, y, 0.0, 0.0},
@@ -599,14 +600,14 @@ void d_VK_BeginFrame()
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-		if (vkBeginCommandBuffer(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], &beginInfo) != VK_SUCCESS) {
+		if (vkBeginCommandBuffer(g_SwapchainCommandBuffers[g_CurrentSwapchainImageIndex], &beginInfo) != VK_SUCCESS) {
 			printf("Failed to record command buffer!\n");
 		}
 
 		INIT_STRUCT(VkRenderPassBeginInfo, renderPassInfo);
 		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		renderPassInfo.renderPass = g_VkRenderPass;
-		renderPassInfo.framebuffer = g_VkFramebuffers[g_CurrentSwapchainImageIndex];
+		renderPassInfo.renderPass = g_SwapchainRenderPass;
+		renderPassInfo.framebuffer = g_SwapchainFramebuffers[g_CurrentSwapchainImageIndex];
 		renderPassInfo.renderArea.offset.x = 0;
 		renderPassInfo.renderArea.offset.y = 0;
 		renderPassInfo.renderArea.extent = g_VkSwapchainExtent;
@@ -617,7 +618,7 @@ void d_VK_BeginFrame()
 		renderPassInfo.clearValueCount = 2;
 		renderPassInfo.pClearValues = &clearValues[0];
 
-		vkCmdBeginRenderPass(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+		vkCmdBeginRenderPass(g_SwapchainCommandBuffers[g_CurrentSwapchainImageIndex], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 	}
 }
 
@@ -627,8 +628,8 @@ void d_VK_EndFrame()
 	// DrawDebugRT("depthrt", g_testDepth, 10, 10, 400, 300);
 
 	// End recording of 2D command buffer
-	vkCmdEndRenderPass(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex]);
-	VK_CHECK_RESULT(vkEndCommandBuffer(g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex]));
+	vkCmdEndRenderPass(g_SwapchainCommandBuffers[g_CurrentSwapchainImageIndex]);
+	VK_CHECK_RESULT(vkEndCommandBuffer(g_SwapchainCommandBuffers[g_CurrentSwapchainImageIndex]));
 
 	// Submit command buffer
 	INIT_STRUCT(VkSubmitInfo, submitInfo)
@@ -640,7 +641,7 @@ void d_VK_EndFrame()
 	submitInfo.pWaitSemaphores = waitSemaphores;
 	submitInfo.pWaitDstStageMask = waitStages;
 
-	VkCommandBuffer commandBuffers[] = { g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex] };
+	VkCommandBuffer commandBuffers[] = { g_SwapchainCommandBuffers[g_CurrentSwapchainImageIndex] };
 	submitInfo.commandBufferCount = 1;
 	submitInfo.pCommandBuffers = &commandBuffers[0];
 
@@ -1053,7 +1054,7 @@ void GeneratePSOFromShaderStage(char* key, shader_t* shader, size_t stage)
 	pipelineInfo.pDynamicState = backEnd.projection2D ? NULL : &dynamicInfo;
 	pipelineInfo.pDepthStencilState = &depthStencilCreateInfo;
 	pipelineInfo.layout = backEnd.projection2D ? g_OrthoPipelineLayout : g_PerspPipelineLayout;
-	pipelineInfo.renderPass = g_VkRenderPass;
+	pipelineInfo.renderPass = g_SwapchainRenderPass;
 	pipelineInfo.subpass = 0;
 	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
@@ -1092,7 +1093,7 @@ void d_VK_DrawTris(shaderCommands_t* input, uint32_t stage, VkBool32 useTexCoord
 		return;*/
 
 	// Pick what command buffer this call will go into, for now just 2D/3D. Eventually we'll split 3D Scene, Arm/Weapon, Avatar health indicator.
-	VkCommandBuffer commandBuffer = g_VkTestCommandBuffers[g_CurrentSwapchainImageIndex];
+	VkCommandBuffer commandBuffer = g_SwapchainCommandBuffers[g_CurrentSwapchainImageIndex];
 
 	VkBuffer vertexBuffer = d_VKAllocation_AcquireChunk(g_VkDevice, &g_VertexAttribsAllocation, input->xyz, sizeof(vec4hack_t)*input->numVertexes);
 	VkBuffer indexBuffer = d_VKAllocation_AcquireChunk(g_VkDevice, &g_IndexAllocation, input->indexes, sizeof(int) * input->numIndexes);
