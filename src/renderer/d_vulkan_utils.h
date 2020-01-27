@@ -14,6 +14,7 @@
 void d_VKUtils_CreateBuffer(VkDevice* device, VkBufferCreateInfo* bufferInfo, VkBuffer* buffer, VkDeviceMemory* deviceMemory, VkMemoryRequirements* memoryRequirements);
 
 void d_VKUtils_CreateImage(VkDevice* device, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage const* image, VkDeviceMemory const* imageMemory);
+void d_VKUtils_CreateImageView(VkDevice g_VkDevice, VkImage image, VkFormat format, VkImageAspectFlagBits aspect, VkImageView* imageView);
 
 VkCommandBuffer d_VKUtils_CreateCommandBuffer(VkDevice* device, VkCommandPool* commandPool, VkCommandBufferLevel level, VkBool32 begin);
 
