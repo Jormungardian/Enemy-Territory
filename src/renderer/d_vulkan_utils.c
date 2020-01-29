@@ -80,6 +80,21 @@ void d_VKUtils_CreateImage(VkDevice* device, uint32_t width, uint32_t height, Vk
 	VK_CHECK_RESULT(vkBindImageMemory(*device, *image, *imageMemory, 0));
 }
 
+void d_VKUtils_CreateImageView(VkDevice g_VkDevice, VkImage image, VkFormat format, VkImageAspectFlagBits aspect, VkImageView* imageView)
+{
+	INIT_STRUCT(VkImageViewCreateInfo, viewCI);
+	viewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	viewCI.image = image;
+	viewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	viewCI.format = format;
+	viewCI.subresourceRange.aspectMask = aspect;
+	viewCI.subresourceRange.baseMipLevel = 0;
+	viewCI.subresourceRange.levelCount = 1;
+	viewCI.subresourceRange.baseArrayLayer = 0;
+	viewCI.subresourceRange.layerCount = 1;
+	VK_CHECK_RESULT(vkCreateImageView(g_VkDevice, &viewCI, NULL, imageView));
+}
+
 inline VkCommandBufferAllocateInfo commandBufferAllocateInfo(
 	VkCommandPool commandPool,
 	VkCommandBufferLevel level,
@@ -132,7 +147,7 @@ void d_VKUtils_FlushCommandBuffer(VkDevice device, VkCommandPool commandPool, Vk
 	vkCreateFence(device, &fenceInfo, NULL, &fence);
 
 	// Submit to the queue
-	vkQueueSubmit(queue, 1, &submitInfo, fence);
+	VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo, fence));
 	// Wait for the fence to signal that command buffer has finished executing
 	vkWaitForFences(device, 1, &fence, VK_TRUE, (uint64_t)(-1));
 

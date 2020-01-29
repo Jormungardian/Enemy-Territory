@@ -18,6 +18,7 @@ VkDescriptorPool g_DebugDescriptorPool;
 VkSampler g_DebugSampler;
 
 VkDescriptorSet g_DrawDebugDepthRTDescriptorSet;
+VkDescriptorSet g_DrawDebugColorRTDescriptorSet;
 
 VkImageView g_testDepth;
 
@@ -26,13 +27,21 @@ VkImageView g_testDepth;
 VkCommandPool g_VkCommandPool;
 
 //////////////////////////////////////////////
+// 3D Pass
+VkCommandBuffer* g_p3DPassCommandBuffers;
+VkFramebuffer* g_p3DPassFramebuffers;
+VkRenderPass g_3DPassRenderPass;
+VkImageView g_3DPassDepthImageView;
+VkImageView* g_3DPassColorImageViews;
+
+//////////////////////////////////////////////
 // Swapchain constructs
-VkFramebuffer* g_SwapchainFramebuffers;
+VkFramebuffer* g_pSwapchainFramebuffers;
+VkCommandBuffer* g_pSwapchainCommandBuffers;
 VkRenderPass g_SwapchainRenderPass;
-VkCommandBuffer* g_SwapchainCommandBuffers;
 //////////////////////////////////////////////
 
-#define D_VK_BUFFER_POOL_SIZE 4096
+#define D_VK_BUFFER_POOL_SIZE 2096
 size_t g_CurrentBufferPoolIndex = 0;
 VkBuffer g_BufferPool[D_VK_BUFFER_POOL_SIZE];
 
@@ -71,10 +80,129 @@ void d_VK_InitWindow(uint32_t width, uint32_t height, const char* title)
 	d_VKCore_InitWindow(width, height, title);
 }
 
+void Create3DPass()
+{
+	VkFormat depthFormat = VK_FORMAT_D24_UNORM_S8_UINT;
+	// 3D Pass is everything that is not backEnd.projection2D. Will have a Color/Depth FB, its own renderpass and command buffer
+
+	// Create one command buffer per swapchain
+	{
+		g_p3DPassCommandBuffers = (VkCommandBuffer*)malloc(g_VkSwapchainImageCount * sizeof(VkCommandBuffer));
+		if (g_p3DPassCommandBuffers != NULL) {
+			for (size_t i = 0; i < g_VkSwapchainImageCount; ++i) {
+				g_p3DPassCommandBuffers[i] = d_VKUtils_CreateCommandBuffer(&g_VkDevice, &g_VkCommandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, VK_FALSE);
+			}
+		}
+	}
+
+	// Create 3DPass RenderPass
+	{
+		INIT_STRUCT(VkAttachmentDescription, colorAttachment);
+		colorAttachment.format = VK_FORMAT_R8G8B8A8_UNORM;
+		colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		INIT_STRUCT(VkAttachmentDescription, depthAttachment);
+		depthAttachment.format = depthFormat;
+		depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+		depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+		INIT_STRUCT(VkAttachmentReference, colorAttachmentRef);
+		colorAttachmentRef.attachment = 0;
+		colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		INIT_STRUCT(VkAttachmentReference, depthAttachmentRef);
+		depthAttachmentRef.attachment = 1;
+		depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+		INIT_STRUCT(VkSubpassDescription, subpass);
+		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpass.colorAttachmentCount = 1;
+		subpass.pColorAttachments = &colorAttachmentRef;
+		subpass.pDepthStencilAttachment = &depthAttachmentRef;
+
+		VkSubpassDependency dependencies[2];
+
+		dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+		dependencies[0].dstSubpass = 0;
+		dependencies[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dependencies[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+		dependencies[1].srcSubpass = 0;
+		dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+		dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+		VkAttachmentDescription attachmentDescriptions[] = { colorAttachment, depthAttachment };
+		INIT_STRUCT(VkRenderPassCreateInfo, renderPassInfo);
+		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+		renderPassInfo.attachmentCount = 2;
+		renderPassInfo.pAttachments = &attachmentDescriptions[0];
+		renderPassInfo.subpassCount = 1;
+		renderPassInfo.pSubpasses = &subpass;
+		renderPassInfo.dependencyCount = 2;
+		renderPassInfo.pDependencies = &dependencies[0];
+
+		VK_CHECK_RESULT(vkCreateRenderPass(g_VkDevice, &renderPassInfo, NULL, &g_3DPassRenderPass));
+	}
+
+	// Create respective Framebuffers
+	{
+		g_3DPassColorImageViews = (VkImageView*)malloc(g_VkSwapchainImageCount * sizeof(VkFramebuffer));
+		g_p3DPassFramebuffers = (VkFramebuffer*)malloc(g_VkSwapchainImageCount * sizeof(VkFramebuffer));
+		if (g_p3DPassFramebuffers) {
+			for (size_t i = 0; i < g_VkSwapchainImageCount; ++i) {
+				// Color
+				VkImage colorImage;
+				VkDeviceMemory colorMemory;
+				d_VKUtils_CreateImage(&g_VkDevice, g_VkSwapchainExtent.width, g_VkSwapchainExtent.height, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &colorImage, &colorMemory);
+				d_VKUtils_CreateImageView(g_VkDevice, colorImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, &g_3DPassColorImageViews[i]);
+
+				// Depth
+				VkImage depthImage;
+				VkDeviceMemory depthMemory;
+				d_VKUtils_CreateImage(&g_VkDevice, g_VkSwapchainExtent.width, g_VkSwapchainExtent.height, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &depthImage, &depthMemory);
+				d_VKUtils_CreateImageView(g_VkDevice, depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, &g_3DPassDepthImageView);
+
+				VkImageView attachments[] = {
+					g_3DPassColorImageViews[i],
+					g_3DPassDepthImageView
+				};
+
+				VkFramebufferCreateInfo framebufferInfo;
+				memset(&framebufferInfo, 0, sizeof(VkFramebufferCreateInfo));
+				framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+				framebufferInfo.renderPass = g_3DPassRenderPass;
+				framebufferInfo.attachmentCount = 2;
+				framebufferInfo.pAttachments = &attachments[0];
+				framebufferInfo.width = g_VkSwapchainExtent.width;
+				framebufferInfo.height = g_VkSwapchainExtent.height;
+				framebufferInfo.layers = 1;
+
+				VK_CHECK_RESULT(vkCreateFramebuffer(g_VkDevice, &framebufferInfo, NULL, &g_p3DPassFramebuffers[i]));
+			}
+		}
+	}
+}
+
 void CreateRenderPass()
 {
-	VkAttachmentDescription colorAttachment;
-	memset(&colorAttachment, 0, sizeof(VkAttachmentDescription));
+	INIT_STRUCT(VkAttachmentDescription, colorAttachment);
 	colorAttachment.format = g_VkSwapchainImageFormat;
 	colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 	colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -147,16 +275,11 @@ void CreateFramebuffers()
 	depthViewCI.subresourceRange.layerCount = 1;
 	VK_CHECK_RESULT(vkCreateImageView(g_VkDevice, &depthViewCI, NULL, &g_testDepth));
 
-	g_SwapchainFramebuffers = (VkFramebuffer*)malloc(g_VkSwapchainImageCount * sizeof(VkFramebuffer));
+	g_pSwapchainFramebuffers = (VkFramebuffer*)malloc(g_VkSwapchainImageCount * sizeof(VkFramebuffer));
 
 	for (size_t i = 0; i < g_VkSwapchainImageCount; i++) {
-		VkImageView attachments[] = {
-			g_VkSwapchainImageViews[i],
-			g_testDepth
-		};
-
-		VkFramebufferCreateInfo framebufferInfo;
-		memset(&framebufferInfo, 0, sizeof(VkFramebufferCreateInfo));
+		VkImageView attachments[] = { g_VkSwapchainImageViews[i], g_testDepth };
+		INIT_STRUCT(VkFramebufferCreateInfo, framebufferInfo);
 		framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 		framebufferInfo.renderPass = g_SwapchainRenderPass;
 		framebufferInfo.attachmentCount = 2;
@@ -165,7 +288,7 @@ void CreateFramebuffers()
 		framebufferInfo.height = g_VkSwapchainExtent.height;
 		framebufferInfo.layers = 1;
 
-		VK_CHECK_RESULT(vkCreateFramebuffer(g_VkDevice, &framebufferInfo, NULL, &g_SwapchainFramebuffers[i]));
+		VK_CHECK_RESULT(vkCreateFramebuffer(g_VkDevice, &framebufferInfo, NULL, &g_pSwapchainFramebuffers[i]));
 	}
 }
 
@@ -236,7 +359,7 @@ void CreateDebugDescriptorSetLayout()
 	vkCreateDescriptorSetLayout(g_VkDevice, &layoutInfo, NULL, &g_DebugDescriptorSetLayout);
 }
 
-VkDescriptorSet CreateDrawDebugRTDescriptorSet(VkImageView imageView)
+VkDescriptorSet CreateDrawDebugRTDescriptorSet(VkBool32 isDepth, VkImageView imageView)
 {
 	VkDescriptorSet ret;
 	VkDescriptorSetLayout layout[] = { g_DebugDescriptorSetLayout };
@@ -248,7 +371,12 @@ VkDescriptorSet CreateDrawDebugRTDescriptorSet(VkImageView imageView)
 	vkAllocateDescriptorSets(g_VkDevice, &allocInfo, &ret);
 
 	INIT_STRUCT(VkDescriptorImageInfo, imageInfo);
-	imageInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+	if (isDepth) {
+		imageInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+	}
+	else {
+		imageInfo.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	}
 	imageInfo.imageView = imageView;
 	imageInfo.sampler = g_DebugSampler;
 
@@ -347,7 +475,7 @@ void CreatePipelineLayout()
 
 void CreateCommandBuffers()
 {
-	g_SwapchainCommandBuffers = (VkCommandBuffer*)malloc(g_VkSwapchainImageCount * sizeof(VkCommandBuffer));
+	g_pSwapchainCommandBuffers = (VkCommandBuffer*)malloc(g_VkSwapchainImageCount * sizeof(VkCommandBuffer));
 
 	INIT_STRUCT(VkCommandBufferAllocateInfo, allocInfo)
 	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -355,7 +483,7 @@ void CreateCommandBuffers()
 	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 	allocInfo.commandBufferCount = 3;
 
-	if (vkAllocateCommandBuffers(g_VkDevice, &allocInfo, g_SwapchainCommandBuffers) != VK_SUCCESS) {
+	if (vkAllocateCommandBuffers(g_VkDevice, &allocInfo, g_pSwapchainCommandBuffers) != VK_SUCCESS) {
 		printf("Failed to allocate test command buffer!\n");
 	}
 }
@@ -512,12 +640,15 @@ void d_VK_InitVulkan()
 	CreateFramebuffers();
 	CreateCommandPool();
 
+	Create3DPass();
+
 	CreateSamplers();
 
 	CreateDebugDescriptorPool();
 	CreateDebugDescriptorSetLayout();
 
-	g_DrawDebugDepthRTDescriptorSet = CreateDrawDebugRTDescriptorSet(g_testDepth);
+	g_DrawDebugDepthRTDescriptorSet = CreateDrawDebugRTDescriptorSet(VK_TRUE, g_3DPassDepthImageView);
+	g_DrawDebugColorRTDescriptorSet = CreateDrawDebugRTDescriptorSet(VK_FALSE, g_3DPassColorImageViews[0]);
 
 	CreateShaderModules();
 
@@ -532,9 +663,9 @@ void d_VK_InitVulkan()
 }
 
 
-void DrawDebugRT(char* psoKey, VkImageView imageView, uint32_t x, uint32_t y, uint32_t w, uint32_t h)
+void DrawDebugRT(VkBool32 isDepth, VkImageView imageView, uint32_t x, uint32_t y, uint32_t w, uint32_t h)
 {
-	VkCommandBuffer commandBuffer = g_SwapchainCommandBuffers[g_CurrentSwapchainImageIndex]; // TODO: When I split 2D into another CB this needs to change!
+	VkCommandBuffer commandBuffer = g_pSwapchainCommandBuffers[g_CurrentSwapchainImageIndex]; // TODO: When I split 2D into another CB this needs to change!
 
 	vec4hack_t verts[] = { {x,  y, 0.0, 0.0},
 						   {x + w, y, 0.0, 0.0},
@@ -566,14 +697,23 @@ void DrawDebugRT(char* psoKey, VkImageView imageView, uint32_t x, uint32_t y, ui
 	vkCmdBindVertexBuffers(commandBuffer, 0, 3, &vertexBuffers[0], offsets);
 
 	// Bind an appropriate PSO
-	void* data = map_get(&g_Q3ShaderMap, psoKey);
+	void* data = NULL;
+	VkDescriptorSet descSet;
+	if (isDepth) {
+		data = map_get(&g_Q3ShaderMap, "depthrt");
+		descSet = g_DrawDebugDepthRTDescriptorSet;
+	}
+	else {
+		data = map_get(&g_Q3ShaderMap, "<default>:p[0]:1:0");
+		descSet = g_DrawDebugColorRTDescriptorSet;
+	}
 
 	if (data != NULL) {
 		VkPipeline** ppPSO = (VkPipeline * *)data;
 		VkPipeline* pPSO = *ppPSO;
 		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, *pPSO);
 
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_OrthoPipelineLayout, 0, 1, &g_DrawDebugDepthRTDescriptorSet, 0, NULL);
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, g_OrthoPipelineLayout, 0, 1, &descSet, 0, NULL);
 
 		float ortho[6] = { glConfig.vidWidth, 0.0, glConfig.vidHeight, 0.0, 1.0, -1.0 };
 		vkCmdPushConstants(commandBuffer, g_OrthoPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, 6 * sizeof(float), &ortho[0]);
@@ -600,14 +740,14 @@ void d_VK_BeginFrame()
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-		if (vkBeginCommandBuffer(g_SwapchainCommandBuffers[g_CurrentSwapchainImageIndex], &beginInfo) != VK_SUCCESS) {
+		if (vkBeginCommandBuffer(g_pSwapchainCommandBuffers[g_CurrentSwapchainImageIndex], &beginInfo) != VK_SUCCESS) {
 			printf("Failed to record command buffer!\n");
 		}
 
 		INIT_STRUCT(VkRenderPassBeginInfo, renderPassInfo);
 		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 		renderPassInfo.renderPass = g_SwapchainRenderPass;
-		renderPassInfo.framebuffer = g_SwapchainFramebuffers[g_CurrentSwapchainImageIndex];
+		renderPassInfo.framebuffer = g_pSwapchainFramebuffers[g_CurrentSwapchainImageIndex];
 		renderPassInfo.renderArea.offset.x = 0;
 		renderPassInfo.renderArea.offset.y = 0;
 		renderPassInfo.renderArea.extent = g_VkSwapchainExtent;
@@ -618,18 +758,48 @@ void d_VK_BeginFrame()
 		renderPassInfo.clearValueCount = 2;
 		renderPassInfo.pClearValues = &clearValues[0];
 
-		vkCmdBeginRenderPass(g_SwapchainCommandBuffers[g_CurrentSwapchainImageIndex], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+		vkCmdBeginRenderPass(g_pSwapchainCommandBuffers[g_CurrentSwapchainImageIndex], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+	}
+
+	{
+		// Begin command buffer recording for this swapchain image index
+		INIT_STRUCT(VkCommandBufferBeginInfo, beginInfo);
+		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+		VK_CHECK_RESULT(vkBeginCommandBuffer(g_p3DPassCommandBuffers[g_CurrentSwapchainImageIndex], &beginInfo));
+
+		INIT_STRUCT(VkRenderPassBeginInfo, renderPassInfo);
+		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		renderPassInfo.renderPass = g_3DPassRenderPass;
+		renderPassInfo.framebuffer = g_p3DPassFramebuffers[g_CurrentSwapchainImageIndex];
+		renderPassInfo.renderArea.offset.x = 0;
+		renderPassInfo.renderArea.offset.y = 0;
+		renderPassInfo.renderArea.extent = g_VkSwapchainExtent;
+
+		VkClearValue clearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+		VkClearValue depthStencil = { 1.0f, 0 };
+		VkClearValue clearValues[] = { clearColor, depthStencil };
+		renderPassInfo.clearValueCount = 2;
+		renderPassInfo.pClearValues = &clearValues[0];
+
+		vkCmdBeginRenderPass(g_p3DPassCommandBuffers[g_CurrentSwapchainImageIndex], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 	}
 }
 
 void d_VK_EndFrame()
 {
+	vkCmdEndRenderPass(g_p3DPassCommandBuffers[g_CurrentSwapchainImageIndex]);
+	// Horrible, but good for debugging... eventually do this right...
+	d_VKUtils_FlushCommandBuffer(g_VkDevice, g_VkCommandPool, g_p3DPassCommandBuffers[g_CurrentSwapchainImageIndex], g_VkGraphicsQueue, VK_FALSE);
+
 	// Draw debug stuff if any.
-	// DrawDebugRT("depthrt", g_testDepth, 10, 10, 400, 300);
+	DrawDebugRT(VK_FALSE, g_3DPassColorImageViews[g_CurrentSwapchainImageIndex], 10, 310, 400, 300);
+	DrawDebugRT(VK_TRUE, g_3DPassDepthImageView, 10, 10, 400, 300);
 
 	// End recording of 2D command buffer
-	vkCmdEndRenderPass(g_SwapchainCommandBuffers[g_CurrentSwapchainImageIndex]);
-	VK_CHECK_RESULT(vkEndCommandBuffer(g_SwapchainCommandBuffers[g_CurrentSwapchainImageIndex]));
+	vkCmdEndRenderPass(g_pSwapchainCommandBuffers[g_CurrentSwapchainImageIndex]);
+	VK_CHECK_RESULT(vkEndCommandBuffer(g_pSwapchainCommandBuffers[g_CurrentSwapchainImageIndex]));
 
 	// Submit command buffer
 	INIT_STRUCT(VkSubmitInfo, submitInfo)
@@ -641,7 +811,7 @@ void d_VK_EndFrame()
 	submitInfo.pWaitSemaphores = waitSemaphores;
 	submitInfo.pWaitDstStageMask = waitStages;
 
-	VkCommandBuffer commandBuffers[] = { g_SwapchainCommandBuffers[g_CurrentSwapchainImageIndex] };
+	VkCommandBuffer commandBuffers[] = { g_pSwapchainCommandBuffers[g_CurrentSwapchainImageIndex] };
 	submitInfo.commandBufferCount = 1;
 	submitInfo.pCommandBuffers = &commandBuffers[0];
 
@@ -893,7 +1063,7 @@ void GeneratePSOFromShaderStage(char* key, shader_t* shader, size_t stage)
 	INIT_STRUCT(VkPipelineShaderStageCreateInfo, vertShaderStageInfo);
 	vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-	vertShaderStageInfo.module = backEnd.projection2D == qtrue ? g_OrthoVertShaderModule : g_PerspVertShaderModule;
+	vertShaderStageInfo.module = backEnd.projection2D ? g_OrthoVertShaderModule : g_PerspVertShaderModule;
 	vertShaderStageInfo.pName = "main";
 
 	INIT_STRUCT(VkPipelineShaderStageCreateInfo, fragShaderStageInfo);
@@ -1035,9 +1205,9 @@ void GeneratePSOFromShaderStage(char* key, shader_t* shader, size_t stage)
 
 	INIT_STRUCT(VkPipelineDepthStencilStateCreateInfo, depthStencilCreateInfo);
 	depthStencilCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-	depthStencilCreateInfo.depthTestEnable = VK_TRUE;// !backEnd.projection2D;
-	depthStencilCreateInfo.depthWriteEnable = VK_TRUE;// !backEnd.projection2D;
-	depthStencilCreateInfo.depthCompareOp = VK_COMPARE_OP_ALWAYS; // VK_COMPARE_OP_LESS;
+	depthStencilCreateInfo.depthTestEnable = shader->stages[stage]->stateBits & GLS_DEPTHTEST_DISABLE ? VK_FALSE : VK_TRUE;
+	depthStencilCreateInfo.depthWriteEnable = shader->stages[stage]->stateBits & GLS_DEPTHMASK_TRUE ? VK_TRUE : VK_FALSE;
+	depthStencilCreateInfo.depthCompareOp = shader->stages[stage]->stateBits & GLS_DEPTHFUNC_EQUAL ? VK_COMPARE_OP_EQUAL : VK_COMPARE_OP_LESS_OR_EQUAL;
 	depthStencilCreateInfo.depthBoundsTestEnable = VK_FALSE;
 	depthStencilCreateInfo.stencilTestEnable = VK_FALSE;
 
@@ -1054,7 +1224,7 @@ void GeneratePSOFromShaderStage(char* key, shader_t* shader, size_t stage)
 	pipelineInfo.pDynamicState = backEnd.projection2D ? NULL : &dynamicInfo;
 	pipelineInfo.pDepthStencilState = &depthStencilCreateInfo;
 	pipelineInfo.layout = backEnd.projection2D ? g_OrthoPipelineLayout : g_PerspPipelineLayout;
-	pipelineInfo.renderPass = g_SwapchainRenderPass;
+	pipelineInfo.renderPass = backEnd.projection2D ? g_SwapchainRenderPass : g_3DPassRenderPass;
 	pipelineInfo.subpass = 0;
 	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
@@ -1093,7 +1263,7 @@ void d_VK_DrawTris(shaderCommands_t* input, uint32_t stage, VkBool32 useTexCoord
 		return;*/
 
 	// Pick what command buffer this call will go into, for now just 2D/3D. Eventually we'll split 3D Scene, Arm/Weapon, Avatar health indicator.
-	VkCommandBuffer commandBuffer = g_SwapchainCommandBuffers[g_CurrentSwapchainImageIndex];
+	VkCommandBuffer commandBuffer = backEnd.projection2D ? g_pSwapchainCommandBuffers[g_CurrentSwapchainImageIndex] : g_p3DPassCommandBuffers[g_CurrentSwapchainImageIndex];
 
 	VkBuffer vertexBuffer = d_VKAllocation_AcquireChunk(g_VkDevice, &g_VertexAttribsAllocation, input->xyz, sizeof(vec4hack_t)*input->numVertexes);
 	VkBuffer indexBuffer = d_VKAllocation_AcquireChunk(g_VkDevice, &g_IndexAllocation, input->indexes, sizeof(int) * input->numIndexes);
@@ -1162,8 +1332,8 @@ void d_VK_DrawTris(shaderCommands_t* input, uint32_t stage, VkBool32 useTexCoord
 			}
 		}
 
-		//mat4 persp;
-		//glm_vkperspective(backEnd.viewParms.fovY, backEnd.viewParms.viewportWidth/(float)backEnd.viewParms.viewportHeight, 1, 100, &persp);
+		mat4 persp;
+		glm_vkperspective(backEnd.viewParms.fovY, backEnd.viewParms.viewportWidth/(float)backEnd.viewParms.viewportHeight, 1, 100, &persp);
 
 		float mats[32];
 		//memcpy(&mats[0], &persp[0], 16 * sizeof(float));
